@@ -154,6 +154,20 @@ impl NiceType<Infallible> {
         }
     }
 
+    fn matches_map<P: Ord + Clone>(&self, pat: &NiceType<P>) -> BTreeMap<P, Self> {
+        match (self, pat) {
+            (ty, NiceType::PatternIdent(p)) => BTreeMap::from_iter([(p.clone(), ty.clone())]),
+            (Self::Never, NiceType::Never) => BTreeMap::new(),
+            (Self::Ident(_name, tys), NiceType::Ident(_pat_name, pat_tys)) => tys
+                .into_iter()
+                .zip(pat_tys)
+                .flat_map(|(ty, pat_ty)| ty.matches_map(pat_ty).into_iter())
+                .collect(),
+            (Self::Literal(_lit), NiceType::Literal(_pat_lit)) => BTreeMap::new(),
+            _ => BTreeMap::new(),
+        }
+    }
+
     fn with_pattern(self: &Box<Self>) -> Box<NiceType<()>> {
         Box::new(self.map_pattern(|_| ()))
     }
@@ -242,7 +256,7 @@ impl<P> NiceType<P> {
             Self::PatternIdent(_) => {
                 *i += 1;
                 NiceType::PatternIdent(format_ident!(
-                    "{}{}",
+                    "{}_{}",
                     INTERNAL_PATTERN_STRING,
                     i.to_string()
                 ))
@@ -341,7 +355,7 @@ impl SigmaEnum {
         )
     }
 
-    fn enum_out(&self) -> proc_macro2::TokenStream {
+    fn to_tokens(&self) -> proc_macro2::TokenStream {
         let SigmaEnum {
             visibility,
             name,
@@ -349,32 +363,75 @@ impl SigmaEnum {
         } = &self;
         let variant_names = self.variant_names();
 
-        quote! {
+        let macro_match = self.macro_match_name();
+        let macro_match_body = self.macro_internal_name("body");
+        let macro_match_process_body = self.macro_internal_name("process_body");
+        let macro_match_variant = self.macro_internal_name("variant");
+        let macro_match_pattern = self.macro_internal_name("pattern");
+
+        let mut patterns_map = BTreeMap::new();
+        for ty in tys {
+            for pat in ty.patterns_matching() {
+                let matches = patterns_map.entry(pat).or_insert(Vec::new());
+                matches.push(ty);
+            }
+        }
+
+        let patterns: Vec<_> = patterns_map.keys().collect();
+        let (pat_names, pat_params): (Vec<_>, Vec<_>) = patterns
+            .iter()
+            .map(|pat| {
+                let NiceType::Ident(name, params) = pat.map_pattern(|_| quote! { _ }) else {
+                    panic!("not ident");
+                };
+                (name, params)
+            })
+            .unzip();
+        let pat_variants: Vec<_> = patterns_map.values().collect();
+        let pat_variant_names: Vec<Vec<_>> = pat_variants
+            .iter()
+            .map(|v| v.iter().map(|ty| ty.variant_name()).collect())
+            .collect();
+
+        let patterns_vars: Vec<_> = patterns.iter().map(|pat| pat.index_patterns()).collect();
+        let pat_variant_assocs: Vec<Vec<_>> = pat_variants
+            .iter()
+            .zip(&patterns_vars)
+            .map(|(v, pat)| v.iter().map(|ty| ty.matches_map(&pat)).collect())
+            .collect();
+        let pat_variant_assocs_keys: Vec<Vec<Vec<_>>> = pat_variant_assocs
+            .iter()
+            .map(|v| v.iter().map(|v| v.keys().collect()).collect())
+            .collect();
+        let pat_variant_assocs_values: Vec<Vec<Vec<_>>> = pat_variant_assocs
+            .iter()
+            .map(|v| v.iter().map(|v| v.values().collect()).collect())
+            .collect();
+        let (pat_vars_names, pat_vars_params): (Vec<_>, Vec<_>) = patterns_vars
+            .iter()
+            .map(|pat| {
+                let NiceType::Ident(name, params) = pat else {
+                    panic!("not ident");
+                };
+                (name, params)
+            })
+            .unzip();
+
+        let enum_out = quote! {
             #visibility enum #name {
                 #(#variant_names(#tys),)*
             }
-        }
-    }
+        };
 
-    fn macro_match(&self) -> proc_macro2::TokenStream {
-        let macro_match = self.macro_match_name();
-        let macro_match_body = self.macro_internal_name("body");
-        let macro_match_pattern = self.macro_internal_name("pattern");
-
-        quote! {
+        let macro_match_def = quote! {
             macro_rules! #macro_match {
                 ( match $( $rest:tt )* ) => {
                     foo_match_body! { (), ( $($rest)* ) }
                 };
             }
-        }
-    }
+        };
 
-    fn macro_match_body(&self) -> proc_macro2::TokenStream {
-        let macro_match_body = self.macro_internal_name("body");
-        let macro_match_process_body = self.macro_internal_name("process_body");
-
-        quote! {
+        let macro_match_body_def = quote! {
             macro_rules! #macro_match_body {
                 ( $what:tt, ({
                     $( $rest:tt )*
@@ -385,16 +442,10 @@ impl SigmaEnum {
                     #macro_match_body ! { ( $($what)* $next ), ( $($rest)* ) }
                 };
             }
-        }
-    }
+        };
 
-    fn macro_match_process_body(&self) -> proc_macro2::TokenStream {
-        let macro_process_body = self.macro_internal_name("process_body");
-        let macro_match_pattern = self.macro_internal_name("pattern");
-        let macro_match_variant = self.macro_internal_name("variant");
-
-        quote! {
-            macro_rules! #macro_process_body {
+        let macro_match_process_body_def = quote! {
+            macro_rules! #macro_match_process_body {
                 ( $what:tt, (), ( $( ( $tyn:ident $(, $( $ty:tt ),* )?; $binding:pat => $body:expr ) )* ) ) => {
                     {
                         let what = $what;
@@ -416,80 +467,45 @@ impl SigmaEnum {
                     ( $tyn:ident $( ::< $($ty:tt),* $(,)? > )? ( $binding:pat ) => { $( $body:tt )* } $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #macro_process_body !( $what, ( $($rest)* ), ( $($matched)* ( $tyn $(, $($ty),* )?; $binding => { $($body)* } ) ) )
+                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( $tyn $(, $($ty),* )?; $binding => { $($body)* } ) ) )
                 };
                 (
                     $what:tt,
                     ( $tyn:ident $( ::< $($ty:tt),* $(,)? > )? ( $binding:pat ) => $body:expr, $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #macro_process_body !( $what, ( $($rest)* ), ( $($matched)* ( $tyn $(, $($ty),* )?; $binding => $body ) ) )
+                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( $tyn $(, $($ty),* )?; $binding => $body ) ) )
                 };
             }
-        }
-    }
+        };
 
-    fn macro_match_variant(&self) -> proc_macro2::TokenStream {
-        let macro_match_variant = self.macro_internal_name("variant");
-
-        quote! {
+        let macro_match_variant_def = quote! {
             macro_rules! #macro_match_variant {
-                ( Foo, (A<0>); $what:ident, $ma:lifetime, $binding:pat => $body:expr ) => {
-                    if let FooEnum::A_0($binding) = $what {
+                #( ( #pat_vars_names, #( (#pat_vars_params) ),*; $what:ident, $ma:lifetime, $binding:pat => $body:expr ) => {
+                    #( if let #name :: #pat_variant_names ($binding) = $what {
+                        #( let #pat_variant_assocs_keys = #pat_variant_assocs_values; )*
                         break $ma($body);
-                    }
-                };
-                ( Foo, (A<1>); $what:ident, $ma:lifetime, $binding:pat => $body:expr ) => {
-                    if let FooEnum::A_0($binding) = $what {
-                        break $ma($body);
-                    }
-                };
-                ( Foo, (A<$N:tt>); $what:ident, $ma:lifetime, $binding:pat => $body:expr ) => {
-                    if let FooEnum::A_0($binding) = $what {
-                        let $N = 0;
-                        break $ma($body);
-                    }
-                    if let FooEnum::A_1($binding) = $what {
-                        let $N = 1;
-                        break $ma($body);
-                    }
-                };
+                    } )*
+                }; )*
             }
-        }
-    }
+        };
 
-    fn macro_match_pattern(&self) -> proc_macro2::TokenStream {
-        let name = &self.name;
-        let macro_match_pattern = self.macro_internal_name("pattern");
-        let mut patterns_map = BTreeMap::new();
-        for ty in &self.tys {
-            for pat in ty.patterns_matching() {
-                let matches = patterns_map.entry(pat).or_insert(Vec::new());
-                matches.push(ty);
-            }
-        }
-
-        // let mut patterns: Vec<_> = patterns.into_iter().collect();
-        // patterns.sort_by_key(|(_, t)| t.len());
-
-        let (pat_names, pat_params): (Vec<_>, Vec<_>) = patterns_map
-            .keys()
-            .map(|pat| {
-                let NiceType::Ident(name, params) = pat.map_pattern(|_| quote! { _ }) else {
-                    panic!("not ident");
-                };
-                (name, params)
-            })
-            .unzip();
-        let tys: Vec<_> = patterns_map.values().collect();
-
-        quote! {
+        let macro_match_pattern_def = quote! {
             #[doc(hidden)]
             macro_rules! #macro_match_pattern {
                 #( ( #pat_names #( , #pat_params )* ) => {
-                    #( #name : #tys (_) )|*
+                    #( #name : #pat_variant_names (_) )|*
                 }; )*
             }
+        };
+
+        quote! {
+            #enum_out
+            #macro_match_def
+            #macro_match_body_def
+            #macro_match_process_body_def
+            #macro_match_variant_def
+            #macro_match_pattern_def
         }
     }
 }
@@ -526,21 +542,5 @@ pub fn sigma_type(_input: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
     let sigma_enum = parse_macro_input!(item as SigmaEnum);
 
-    // Build the output, possibly using quasi-quotation
-    let enum_out = sigma_enum.enum_out();
-    let macro_match = sigma_enum.macro_match();
-    let macro_match_body = sigma_enum.macro_match_body();
-    let macro_match_process_body = sigma_enum.macro_match_process_body();
-    let macro_match_variant = sigma_enum.macro_match_variant();
-    let macro_match_pattern = sigma_enum.macro_match_pattern();
-
-    // Hand the output tokens back to the compiler
-    TokenStream::from(quote! {
-        #enum_out
-        #macro_match
-        #macro_match_body
-        #macro_match_process_body
-        #macro_match_variant
-        #macro_match_pattern
-    })
+    sigma_enum.to_tokens().into()
 }

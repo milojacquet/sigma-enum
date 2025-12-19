@@ -39,7 +39,7 @@ fn match_ab_enum() {
     assert_eq!(
         ab_enum_match!(match AbEnum::A(A) {
             B(_ab) => 1,
-            T(_ab) => 2,
+            _ab => 2,
         }),
         2
     );
@@ -56,6 +56,11 @@ fn match_foo_enum() {
     );
 
     assert!(foo_enum_match!(match FooEnum::Foo_A(Foo(A)) {
-        Foo::<T>(foo) => foo.is_a(),
+        Foo::<(?T)>(foo) => foo.is_a(),
+        Foo::<A>(_foo) => false, // intentionally does not match
+    }),);
+
+    assert!(foo_enum_match!(match FooEnum::Foo_A(Foo(A)) {
+        foo => foo.is_a(),
     }),);
 }

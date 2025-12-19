@@ -21,6 +21,7 @@ use syn::spanned::Spanned;
 mod nice_type;
 
 const INTERNAL_IDENT: &str = "__INTERNAL_IDENT";
+const INTERNAL_FULL_WILDCARD: &str = "__INTERNAL_FULL_WILDCARD";
 
 #[derive(Clone)]
 struct SigmaEnum {
@@ -64,6 +65,8 @@ impl ToTokens for SigmaEnum {
         let macro_match_process_body = self.macro_internal_name("process_body");
         let macro_match_variant = self.macro_internal_name("variant");
         let macro_match_pattern = self.macro_internal_name("pattern");
+
+        let internal_full_wildcard = format_ident!("{INTERNAL_FULL_WILDCARD}");
 
         let mut patterns_map = BTreeMap::new();
         for ty in tys {
@@ -115,13 +118,21 @@ impl ToTokens for SigmaEnum {
             .iter()
             .map(|pat| match pat {
                 NiceType::Ident(name, params) => (
-                    format_ident!("{}", name).to_token_stream(),
+                    format_ident!("{}", name),
                     params
                         .iter()
-                        .map(|param| param.map_pattern(|p| quote! { $ #p :ident }))
+                        .map(|param| {
+                            let param = param.map_pattern(|p| quote! { ? $ #p :ident });
+                            match param {
+                                NiceType::PatternIdent(_) => {
+                                    param.map_pattern(|p| quote! { ( #p ) })
+                                }
+                                param => param,
+                            }
+                        })
                         .collect(),
                 ),
-                NiceType::PatternIdent(p) => (quote! { $ #p :ident }, Vec::new()),
+                NiceType::PatternIdent(_p) => (internal_full_wildcard.clone(), Vec::new()),
                 _ => panic!("not ident {:?}", pat),
             })
             .unzip();
@@ -186,6 +197,13 @@ impl ToTokens for SigmaEnum {
                     ( $( $matched:tt )* )
                 ) => {
                     #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( $tyn $(, $($ty),* )?; $binding => $body ) ) )
+                };
+                (
+                    $what:tt,
+                    ( $binding:pat => $body:expr, $( $rest:tt )* ),
+                    ( $( $matched:tt )* )
+                ) => {
+                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( #internal_full_wildcard ; $binding => $body ) ) )
                 };
             }
         });

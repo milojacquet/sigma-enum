@@ -213,7 +213,7 @@ impl ToTokens for SigmaEnum {
             macro_rules! #macro_match_variant {
                 #( ( #pat_vars_names #( , #pat_vars_params ),*; $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
                     #( if let #name :: #pat_variant_names ($binding) = $what {
-                        #( let #pat_variant_assocs_keys = #pat_variant_assocs_values; )*
+                        #( #[allow(nonstandard_style)] let $ #pat_variant_assocs_keys = #pat_variant_assocs_values; )*
                         break $ma($body);
                     } )*
                 }; )*

@@ -59,10 +59,10 @@ impl NiceTypeLit {
         }
     }
 
-    fn variant_name(&self) -> Ident {
+    fn variant_name_string(&self) -> String {
         match self {
-            NiceTypeLit::Int(digits) => format_ident!("{}", digits.replace("-", "Neg")),
-            NiceTypeLit::Bool(b) => format_ident!("{}", b),
+            NiceTypeLit::Int(digits) => digits.replace("-", "Neg"),
+            NiceTypeLit::Bool(b) => b.to_string(),
         }
     }
 }
@@ -220,20 +220,24 @@ impl NiceType<Infallible> {
         pats
     }
 
-    pub fn variant_name(&self) -> Ident {
+    pub fn variant_name_string(&self) -> String {
         match self {
-            NiceType::Never => format_ident!("Never"),
-            NiceType::Ident(name, tys) => format_ident!(
+            NiceType::Never => "Never".to_string(),
+            NiceType::Ident(name, tys) => format!(
                 "{}{}",
                 name,
                 tys.iter()
-                    .map(|ty| format!("_{}", Self::variant_name(ty)))
+                    .map(|ty| format!("_{}", Self::variant_name_string(ty)))
                     .collect::<Vec<_>>()
                     .join("")
             ),
-            NiceType::Literal(lit) => lit.variant_name(),
+            NiceType::Literal(lit) => lit.variant_name_string(),
             Self::PatternIdent(x) => x.absurd(),
         }
+    }
+
+    pub fn variant_name(&self) -> Ident {
+        format_ident!("{}", self.variant_name_string())
     }
 }
 

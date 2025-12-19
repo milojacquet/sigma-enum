@@ -1,5 +1,5 @@
 [package]
-name = "sigma-enum"
+name = "sigma-type"
 version = "0.1.0"
 edition = "2024"
 

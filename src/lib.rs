@@ -4,7 +4,9 @@ use quote::ToTokens;
 use quote::TokenStreamExt;
 use quote::format_ident;
 use quote::quote;
-use std::collections::HashSet;
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use syn::Expr;
 use syn::GenericArgument;
 use syn::Ident;
@@ -17,8 +19,10 @@ use syn::parenthesized;
 use syn::parse::Parse;
 use syn::parse::ParseStream;
 use syn::parse_macro_input;
+use syn::spanned::Spanned;
 
 const INTERNAL_IDENT_STRING: &str = "__INTERNAL_IDENT_STRING";
+const INTERNAL_PATTERN_STRING: &str = "__INTERNAL_PATTERN_STRING";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct Infallible(std::convert::Infallible);
@@ -49,7 +53,7 @@ fn zip_equal<A, B>(
     })
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 enum NiceTypeLit {
     Int(String),
     Bool(bool),
@@ -76,12 +80,8 @@ impl NiceTypeLit {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum NiceType<P> {
-    Array(Box<NiceType<P>>, Box<NiceType<P>>),
     Never,
     Ident(String, Vec<NiceType<P>>),
-    PtrConst(Box<NiceType<P>>),
-    PtrMut(Box<NiceType<P>>),
-    Tuple(Vec<NiceType<P>>),
     Literal(NiceTypeLit),
     PatternIdent(P),
 }
@@ -89,12 +89,6 @@ enum NiceType<P> {
 impl NiceType<Infallible> {
     fn from_type(ty: &Type) -> Option<Self> {
         match ty {
-            Type::Array(type_array) => {
-                let Expr::Lit(len) = &type_array.len else {
-                    return None;
-                };
-                Some(Self::Literal(NiceTypeLit::from_lit(&len.lit)?))
-            }
             Type::Never(_type_never) => Some(Self::Never),
             Type::Paren(type_paren) => Self::from_type(&type_paren.elem),
             Type::Path(type_path) => {
@@ -128,33 +122,18 @@ impl NiceType<Infallible> {
                     }
                 }
             }
-            Type::Ptr(type_ptr) => match type_ptr.mutability {
-                Some(_) => Some(Self::PtrMut(Box::new(Self::from_type(&type_ptr.elem)?))),
-                None => Some(Self::PtrConst(Box::new(Self::from_type(&type_ptr.elem)?))),
-            },
-            Type::Tuple(type_tuple) => {
-                let mut tys = Vec::new();
-                for ty in &type_tuple.elems {
-                    tys.push(Self::from_type(&ty)?);
-                }
-                Some(Self::Tuple(tys))
-            }
             _ => None,
         }
     }
 
-    fn words(&self) -> HashSet<String> {
-        let mut ws = HashSet::new();
+    fn words(&self) -> BTreeSet<String> {
+        let mut ws = BTreeSet::new();
         match self {
-            Self::Array(ty, _len) => ws.extend(ty.words()),
             Self::Never => (),
             Self::Ident(name, tys) => {
                 ws.insert(name.to_string());
                 ws.extend(tys.iter().flat_map(|ty| ty.words()));
             }
-            Self::PtrConst(ty) => ws.extend(ty.words()),
-            Self::PtrMut(ty) => ws.extend(ty.words()),
-            Self::Tuple(tys) => ws.extend(tys.iter().flat_map(|ty| ty.words())),
             Self::Literal(_lit) => (),
             Self::PatternIdent(x) => x.absurd(),
         }
@@ -164,19 +143,11 @@ impl NiceType<Infallible> {
     fn matches<P>(&self, pat: &NiceType<P>) -> bool {
         match (self, pat) {
             (_, NiceType::PatternIdent(_)) => true,
-            (Self::Array(ty, len), NiceType::Array(pat_ty, pat_len)) => {
-                ty.matches(pat_ty) && len.matches(pat_len)
-            }
             (Self::Never, NiceType::Never) => true,
             (Self::Ident(name, tys), NiceType::Ident(pat_name, pat_tys)) => {
                 name == pat_name
                     && zip_equal(tys, pat_tys)
                         .all(|typ| typ.is_ok_and(|(ty, pat_ty)| ty.matches(pat_ty)))
-            }
-            (Self::PtrConst(ty), NiceType::PtrConst(pat_ty)) => ty.matches(pat_ty),
-            (Self::PtrMut(ty), NiceType::PtrMut(pat_ty)) => ty.matches(pat_ty),
-            (Self::Tuple(tys), NiceType::Tuple(pat_tys)) => {
-                zip_equal(tys, pat_tys).all(|typ| typ.is_ok_and(|(ty, pat_ty)| ty.matches(pat_ty)))
             }
             (Self::Literal(lit), NiceType::Literal(pat_lit)) => lit == pat_lit,
             _ => false,
@@ -187,12 +158,8 @@ impl NiceType<Infallible> {
         Box::new(self.map_pattern(|_| ()))
     }
 
-    fn to_pattern(&self, words: &HashSet<String>) -> NiceType<()> {
+    fn to_pattern(&self, words: &BTreeSet<String>) -> NiceType<()> {
         match self {
-            Self::Array(ty, len) => NiceType::Array(
-                Box::new(ty.to_pattern(words)),
-                Box::new(len.to_pattern(words)),
-            ),
             Self::Never => NiceType::Never,
             Self::Ident(name, tys) => {
                 if words.contains(name) && tys.is_empty() {
@@ -204,23 +171,14 @@ impl NiceType<Infallible> {
                     )
                 }
             }
-            Self::PtrConst(ty) => NiceType::PtrConst(Box::new(ty.to_pattern(words))),
-            Self::PtrMut(ty) => NiceType::PtrConst(Box::new(ty.to_pattern(words))),
-            Self::Tuple(tys) => {
-                NiceType::Tuple(tys.iter().map(|ty| ty.to_pattern(words)).collect())
-            }
             Self::Literal(lit) => NiceType::Literal(lit.clone()),
             Self::PatternIdent(x) => x.absurd(),
         }
     }
 
-    fn patterns_matching(&self) -> HashSet<NiceType<()>> {
-        let mut pats = HashSet::from_iter([self.map_pattern(|_| ()), NiceType::PatternIdent(())]);
+    fn patterns_matching(&self) -> BTreeSet<NiceType<()>> {
+        let mut pats = BTreeSet::from_iter([self.map_pattern(|_| ()), NiceType::PatternIdent(())]);
         match self {
-            Self::Array(ty, len) => pats.extend([
-                NiceType::Array(ty.with_pattern(), Box::new(NiceType::PatternIdent(()))),
-                NiceType::Array(Box::new(NiceType::PatternIdent(())), len.with_pattern()),
-            ]),
             Self::Never => (),
             Self::Ident(_name, _tys) => 'i: {
                 let mut ident = self.clone();
@@ -245,35 +203,6 @@ impl NiceType<Infallible> {
                         .collect::<Vec<_>>() // why collect
                 }));
             }
-            Self::PtrConst(_ty) => {
-                pats.extend([NiceType::PtrConst(Box::new(NiceType::PatternIdent(())))])
-            }
-            Self::PtrMut(_ty) => {
-                pats.extend([NiceType::PtrMut(Box::new(NiceType::PatternIdent(())))])
-            }
-            Self::Tuple(_tys) => 'i: {
-                let mut tuple = self.clone();
-                let NiceType::Tuple(tys) = &mut tuple else {
-                    unreachable!();
-                };
-                let Some(last) = tys.pop() else {
-                    break 'i ();
-                };
-                let tuple_patterns = tuple.patterns_matching();
-                pats.extend(tuple_patterns.iter().flat_map(|tuple_pattern| {
-                    last.patterns_matching()
-                        .iter()
-                        .map(|new_pattern| {
-                            let mut out = tuple_pattern.clone();
-                            let NiceType::Tuple(tys) = &mut out else {
-                                unreachable!();
-                            };
-                            tys.push(new_pattern.map_pattern(|_| ()));
-                            out
-                        })
-                        .collect::<Vec<_>>() // why collect
-                }));
-            }
             Self::Literal(_lit) => (),
             Self::PatternIdent(x) => x.absurd(),
         }
@@ -282,17 +211,6 @@ impl NiceType<Infallible> {
 
     fn variant_name(&self) -> String {
         match self {
-            NiceType::Array(ty, len) => {
-                format!(
-                    "Array_{}_{}",
-                    Self::variant_name(ty),
-                    if let Self::Literal(NiceTypeLit::Int(digits)) = &**len {
-                        digits
-                    } else {
-                        panic!("not int")
-                    }
-                )
-            }
             NiceType::Never => "Never".to_string(),
             NiceType::Ident(name, tys) => format!(
                 "{}{}",
@@ -302,35 +220,72 @@ impl NiceType<Infallible> {
                     .collect::<Vec<_>>()
                     .join("")
             ),
-            NiceType::PtrConst(ty) => format!("PtrConst_{}", Self::variant_name(ty)),
-            NiceType::PtrMut(ty) => format!("PtrMut_{}", Self::variant_name(ty)),
-            NiceType::Tuple(tys) => tys
-                .iter()
-                .map(|ty| format!("_{}", Self::variant_name(ty)))
-                .collect::<Vec<_>>()
-                .join("_"),
             NiceType::Literal(lit) => lit.variant_name(),
             Self::PatternIdent(x) => x.absurd(),
         }
     }
 }
 
-impl<P: Copy> NiceType<P> {
-    fn map_pattern<Q>(&self, f: fn(P) -> Q) -> NiceType<Q> {
+impl<P> NiceType<P> {
+    fn index_patterns(&self) -> NiceType<Ident> {
+        self.index_patterns_index(&mut 0)
+    }
+
+    fn index_patterns_index(&self, i: &mut usize) -> NiceType<Ident> {
         match self {
-            Self::Array(ty, len) => {
-                NiceType::Array(Box::new(ty.map_pattern(f)), Box::new(len.map_pattern(f)))
-            }
             Self::Never => NiceType::Never,
             Self::Ident(name, tys) => NiceType::Ident(
                 name.clone(),
-                tys.iter().map(|ty| ty.map_pattern(f)).collect(),
+                tys.iter().map(|ty| ty.index_patterns_index(i)).collect(),
             ),
-            Self::PtrConst(ty) => NiceType::PtrConst(Box::new(ty.map_pattern(f))),
-            Self::PtrMut(ty) => NiceType::PtrMut(Box::new(ty.map_pattern(f))),
-            Self::Tuple(tys) => NiceType::Tuple(tys.iter().map(|ty| ty.map_pattern(f)).collect()),
             Self::Literal(lit) => NiceType::Literal(lit.clone()),
-            Self::PatternIdent(p) => NiceType::PatternIdent(f(*p)),
+            Self::PatternIdent(_) => {
+                *i += 1;
+                NiceType::PatternIdent(format_ident!(
+                    "{}{}",
+                    INTERNAL_PATTERN_STRING,
+                    i.to_string()
+                ))
+            }
+        }
+    }
+}
+
+impl<P: Eq> PartialOrd for NiceType<P> {
+    fn partial_cmp(&self, other: &NiceType<P>) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// those with more patternidents are larger
+impl<P: Eq> Ord for NiceType<P> {
+    fn cmp(&self, other: &NiceType<P>) -> Ordering {
+        match (self, other) {
+            (_, NiceType::PatternIdent(_)) => Ordering::Greater,
+            (NiceType::PatternIdent(_), _) => Ordering::Less,
+            (Self::Never, NiceType::Never) => Ordering::Equal,
+            (_, NiceType::Never) => Ordering::Greater,
+            (NiceType::Never, _) => Ordering::Less,
+            (Self::Ident(name, tys), NiceType::Ident(pat_name, pat_tys)) => {
+                name.cmp(&pat_name).then_with(|| tys.cmp(&pat_tys))
+            }
+            (_, NiceType::Ident(..)) => Ordering::Greater,
+            (NiceType::Ident(..), _) => Ordering::Less,
+            (Self::Literal(lit), NiceType::Literal(pat_lit)) => lit.cmp(&pat_lit),
+        }
+    }
+}
+
+impl<P> NiceType<P> {
+    fn map_pattern<Q>(&self, f: impl Fn(&P) -> Q + Clone) -> NiceType<Q> {
+        match self {
+            Self::Never => NiceType::Never,
+            Self::Ident(name, tys) => NiceType::Ident(
+                name.clone(),
+                tys.iter().map(|ty| ty.map_pattern(f.clone())).collect(),
+            ),
+            Self::Literal(lit) => NiceType::Literal(lit.clone()),
+            Self::PatternIdent(p) => NiceType::PatternIdent(f(p)),
         }
     }
 }
@@ -338,15 +293,11 @@ impl<P: Copy> NiceType<P> {
 impl<P: ToTokens> ToTokens for NiceType<P> {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         tokens.append_all(match self {
-            Self::Array(ty, len) => quote! { [#ty, #len] },
             Self::Never => quote! { ! },
             Self::Ident(name, tys) => {
                 let name = format_ident!("{}", name);
                 quote! { #name < #(#tys),* > }
             }
-            Self::PtrConst(ty) => quote! { *const #ty },
-            Self::PtrMut(ty) => quote! { *mut #ty },
-            Self::Tuple(tys) => quote! { ( #(#tys),* ) },
             Self::Literal(NiceTypeLit::Int(digits)) => digits.parse().unwrap(),
             Self::Literal(NiceTypeLit::Bool(b)) => quote! { #b },
             Self::PatternIdent(p) => {
@@ -379,16 +330,13 @@ impl SigmaEnum {
         )
     }
 
-    fn macro_match_variant_name(&self) -> Ident {
+    fn macro_internal_name(&self, which: &str) -> Ident {
         Ident::new(
-            &format!("{}_match_variant", self.name.to_string().to_snake_case()),
-            self.name.span(),
-        )
-    }
-
-    fn macro_match_pattern_name(&self) -> Ident {
-        Ident::new(
-            &format!("{}_match_pattern", self.name.to_string().to_snake_case()),
+            &format!(
+                "{INTERNAL_IDENT_STRING}_{}_{}",
+                self.name.to_string().to_snake_case(),
+                which
+            ),
             self.name.span(),
         )
     }
@@ -409,55 +357,138 @@ impl SigmaEnum {
     }
 
     fn macro_match(&self) -> proc_macro2::TokenStream {
-        let macro_match_name = self.macro_match_name();
-        let macro_match_variant_name = self.macro_match_variant_name();
-        let macro_match_pattern_name = self.macro_match_pattern_name();
+        let macro_match = self.macro_match_name();
+        let macro_match_body = self.macro_internal_name("body");
+        let macro_match_pattern = self.macro_internal_name("pattern");
 
         quote! {
-            macro_rules! #macro_match_name {
-                ( $what:expr, {
-                    $( $tyn:ident ::< $($ty:tt),* $(,)? > ( $binding:pat ) => $body:expr ),* $(,)?
-                } ) => {
+            macro_rules! #macro_match {
+                ( match $( $rest:tt )* ) => {
+                    foo_match_body! { (), ( $($rest)* ) }
+                };
+            }
+        }
+    }
+
+    fn macro_match_body(&self) -> proc_macro2::TokenStream {
+        let macro_match_body = self.macro_internal_name("body");
+        let macro_match_process_body = self.macro_internal_name("process_body");
+
+        quote! {
+            macro_rules! #macro_match_body {
+                ( $what:tt, ({
+                    $( $rest:tt )*
+                }) ) => {
+                    #macro_match_process_body !( $what, ( $($rest)* ), () )
+                };
+                ( ( $( $what:tt )* ), ( $next:tt $( $rest:tt )* ) ) => {
+                    #macro_match_body ! { ( $($what)* $next ), ( $($rest)* ) }
+                };
+            }
+        }
+    }
+
+    fn macro_match_process_body(&self) -> proc_macro2::TokenStream {
+        let macro_process_body = self.macro_internal_name("process_body");
+        let macro_match_pattern = self.macro_internal_name("pattern");
+        let macro_match_variant = self.macro_internal_name("variant");
+
+        quote! {
+            macro_rules! #macro_process_body {
+                ( $what:tt, (), ( $( ( $tyn:ident $(, $( $ty:tt ),* )?; $binding:pat => $body:expr ) )* ) ) => {
                     {
                         let what = $what;
 
                         #[allow(unreachable_patterns)]
                         match what {
-                            $( #macro_match_pattern_name !($($ty),*) => (), )*
+                            $( #macro_match_pattern !($tyn $(, $($ty),* )?) => (), )*
                         }
 
                         #[allow(unused_labels)]
                         'ma: {
-                            $( #macro_match_variant_name !{$($ty),*; what, 'ma, $binding => $body} )*
-                            panic!("no match");
+                            $( #macro_match_variant !{$tyn $(, $($ty),* )?; what, 'ma, $binding => $body} )*
+                            unreachable!();
                         }
                     }
+                };
+                (
+                    $what:tt,
+                    ( $tyn:ident $( ::< $($ty:tt),* $(,)? > )? ( $binding:pat ) => { $( $body:tt )* } $( $rest:tt )* ),
+                    ( $( $matched:tt )* )
+                ) => {
+                    #macro_process_body !( $what, ( $($rest)* ), ( $($matched)* ( $tyn $(, $($ty),* )?; $binding => { $($body)* } ) ) )
+                };
+                (
+                    $what:tt,
+                    ( $tyn:ident $( ::< $($ty:tt),* $(,)? > )? ( $binding:pat ) => $body:expr, $( $rest:tt )* ),
+                    ( $( $matched:tt )* )
+                ) => {
+                    #macro_process_body !( $what, ( $($rest)* ), ( $($matched)* ( $tyn $(, $($ty),* )?; $binding => $body ) ) )
                 };
             }
         }
     }
 
     fn macro_match_variant(&self) -> proc_macro2::TokenStream {
-        let macro_match_variant_name = self.macro_match_variant_name();
-        let macro_match_pattern_name = self.macro_match_pattern_name();
+        let macro_match_variant = self.macro_internal_name("variant");
 
-        todo!()
+        quote! {
+            macro_rules! #macro_match_variant {
+                ( Foo, (A<0>); $what:ident, $ma:lifetime, $binding:pat => $body:expr ) => {
+                    if let FooEnum::A_0($binding) = $what {
+                        break $ma($body);
+                    }
+                };
+                ( Foo, (A<1>); $what:ident, $ma:lifetime, $binding:pat => $body:expr ) => {
+                    if let FooEnum::A_0($binding) = $what {
+                        break $ma($body);
+                    }
+                };
+                ( Foo, (A<$N:tt>); $what:ident, $ma:lifetime, $binding:pat => $body:expr ) => {
+                    if let FooEnum::A_0($binding) = $what {
+                        let $N = 0;
+                        break $ma($body);
+                    }
+                    if let FooEnum::A_1($binding) = $what {
+                        let $N = 1;
+                        break $ma($body);
+                    }
+                };
+            }
+        }
     }
 
     fn macro_match_pattern(&self) -> proc_macro2::TokenStream {
-        let macro_match_pattern_name = self.macro_match_pattern_name();
+        let name = &self.name;
+        let macro_match_pattern = self.macro_internal_name("pattern");
+        let mut patterns_map = BTreeMap::new();
+        for ty in &self.tys {
+            for pat in ty.patterns_matching() {
+                let matches = patterns_map.entry(pat).or_insert(Vec::new());
+                matches.push(ty);
+            }
+        }
+
+        // let mut patterns: Vec<_> = patterns.into_iter().collect();
+        // patterns.sort_by_key(|(_, t)| t.len());
+
+        let (pat_names, pat_params): (Vec<_>, Vec<_>) = patterns_map
+            .keys()
+            .map(|pat| {
+                let NiceType::Ident(name, params) = pat.map_pattern(|_| quote! { _ }) else {
+                    panic!("not ident");
+                };
+                (name, params)
+            })
+            .unzip();
+        let tys: Vec<_> = patterns_map.values().collect();
 
         quote! {
-            macro_rules! #macro_match_pattern_name {
-                ( (A<0>) ) => {
-                    FooEnum::A_0(_)
-                };
-                ( (A<1>) ) => {
-                    FooEnum::A_1(_)
-                };
-                ( (A<$N:tt>) ) => {
-                    FooEnum::A_0(_) | FooEnum::A_1(_)
-                };
+            #[doc(hidden)]
+            macro_rules! #macro_match_pattern {
+                #( ( #pat_names #( , #pat_params )* ) => {
+                    #( #name : #tys (_) )|*
+                }; )*
             }
         }
     }
@@ -477,10 +508,11 @@ impl Parse for SigmaEnum {
             parenthesized!(ty_paren in content);
             let ty: Type = ty_paren.parse()?;
             assert!(ty_paren.is_empty());
-            // tys.push(ty);
+            tys.push(
+                NiceType::from_type(&ty).ok_or(syn::Error::new(ty.span(), "type is not nice"))?,
+            );
         }
 
-        todo!();
         Ok(SigmaEnum {
             visibility,
             name,
@@ -495,7 +527,20 @@ pub fn sigma_type(_input: TokenStream, item: TokenStream) -> TokenStream {
     let sigma_enum = parse_macro_input!(item as SigmaEnum);
 
     // Build the output, possibly using quasi-quotation
+    let enum_out = sigma_enum.enum_out();
+    let macro_match = sigma_enum.macro_match();
+    let macro_match_body = sigma_enum.macro_match_body();
+    let macro_match_process_body = sigma_enum.macro_match_process_body();
+    let macro_match_variant = sigma_enum.macro_match_variant();
+    let macro_match_pattern = sigma_enum.macro_match_pattern();
 
     // Hand the output tokens back to the compiler
-    TokenStream::from(quote! {})
+    TokenStream::from(quote! {
+        #enum_out
+        #macro_match
+        #macro_match_body
+        #macro_match_process_body
+        #macro_match_variant
+        #macro_match_pattern
+    })
 }

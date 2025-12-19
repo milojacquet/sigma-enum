@@ -206,10 +206,9 @@ impl NiceType<Infallible> {
                         .iter()
                         .map(|new_pattern| {
                             let mut out = ident_pattern.clone();
-                            let NiceType::Ident(_name, tys) = &mut out else {
-                                unreachable!();
-                            };
-                            tys.push(new_pattern.map_pattern(|_| ()));
+                            if let NiceType::Ident(_name, tys) = &mut out {
+                                tys.push(new_pattern.map_pattern(|_| ()));
+                            }
                             out
                         })
                         .collect::<Vec<_>>() // why collect
@@ -306,7 +305,11 @@ impl<P: ToTokens> ToTokens for NiceType<P> {
             Self::Never => tokens.append_all(quote! { ! }),
             Self::Ident(name, tys) => {
                 let name = format_ident!("{}", name);
-                tokens.append_all(quote! { #name < #(#tys),* > })
+                if tys.is_empty() {
+                    tokens.append_all(quote! { #name })
+                } else {
+                    tokens.append_all(quote! { #name < #(#tys),* > })
+                }
             }
             Self::Literal(lit) => lit.to_tokens(tokens),
             Self::PatternIdent(p) => p.to_tokens(tokens),

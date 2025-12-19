@@ -3,6 +3,16 @@ use sigma_type::sigma_type;
 struct A;
 struct B;
 struct Foo<T>(T);
+impl Foo<A> {
+    fn is_a(&self) -> bool {
+        true
+    }
+}
+impl Foo<B> {
+    fn is_a(&self) -> bool {
+        false
+    }
+}
 
 #[sigma_type]
 enum AbEnum {
@@ -10,11 +20,11 @@ enum AbEnum {
     __(B),
 }
 
-// #[sigma_type]
-// enum FooEnum {
-//     __(Foo<A>),
-//     __(Foo<B>),
-// }
+#[sigma_type]
+enum FooEnum {
+    __(Foo<A>),
+    __(Foo<B>),
+}
 
 #[test]
 fn match_ab_enum() {
@@ -35,13 +45,17 @@ fn match_ab_enum() {
     );
 }
 
-// #[test]
-// fn match_foo_enum() {
-//     assert_eq!(
-//         foo_enum_match!(match FooEnum::Foo_A(A) {
-//             A(foo) => 1,
-//             B(foo) => 2,
-//         }),
-//         1
-//     );
-// }
+#[test]
+fn match_foo_enum() {
+    assert_eq!(
+        foo_enum_match!(match FooEnum::Foo_B(Foo(B)) {
+            Foo::<A>(_foo) => 1,
+            Foo::<B>(_foo) => 2,
+        }),
+        2
+    );
+
+    assert!(foo_enum_match!(match FooEnum::Foo_A(Foo(A)) {
+        Foo::<T>(foo) => foo.is_a(),
+    }),);
+}

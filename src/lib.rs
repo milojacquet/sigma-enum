@@ -73,6 +73,8 @@ impl ToTokens for SigmaEnum {
             }
         }
 
+        // panic!("{:?}", patterns_map);
+
         let patterns: Vec<_> = patterns_map.keys().collect();
         let pat_variants: Vec<_> = patterns_map.values().collect();
         let pat_variant_names: Vec<Vec<_>> = pat_variants
@@ -112,9 +114,13 @@ impl ToTokens for SigmaEnum {
         let (pat_vars_names, pat_vars_params): (Vec<_>, Vec<_>) = patterns_vars
             .iter()
             .map(|pat| match pat {
-                NiceType::Ident(name, params) => {
-                    (format_ident!("{}", name).to_token_stream(), params.clone())
-                }
+                NiceType::Ident(name, params) => (
+                    format_ident!("{}", name).to_token_stream(),
+                    params
+                        .iter()
+                        .map(|param| param.map_pattern(|p| quote! { $ #p :ident }))
+                        .collect(),
+                ),
                 NiceType::PatternIdent(p) => (quote! { $ #p :ident }, Vec::new()),
                 _ => panic!("not ident {:?}", pat),
             })
@@ -187,7 +193,7 @@ impl ToTokens for SigmaEnum {
         tokens.append_all(quote! {
             #[doc(hidden)]
             macro_rules! #macro_match_variant {
-                #( ( #pat_vars_names #( , (#pat_vars_params) ),*; $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
+                #( ( #pat_vars_names #( , #pat_vars_params ),*; $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
                     #( if let #name :: #pat_variant_names ($binding) = $what {
                         #( let #pat_variant_assocs_keys = #pat_variant_assocs_values; )*
                         break $ma($body);

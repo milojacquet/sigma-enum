@@ -10,6 +10,9 @@ use syn::GenericArgument;
 use syn::Ident;
 use syn::Lit;
 use syn::Type;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::spanned::Spanned;
 
 const INTERNAL_PATTERN: &str = "__INTERNAL_PATTERN";
 
@@ -49,13 +52,13 @@ pub enum NiceTypeLit {
 }
 
 impl NiceTypeLit {
-    fn from_lit(lit: &Lit) -> Option<Self> {
+    pub fn from_lit(lit: &Lit) -> syn::Result<Self> {
         match lit {
-            Lit::Byte(_lit_byte) => None, // TODO: char and byte
-            Lit::Char(_lit_char) => None,
-            Lit::Int(lit_int) => Some(Self::Int(lit_int.base10_digits().to_string())),
-            Lit::Bool(lit_bool) => Some(Self::Bool(lit_bool.value)),
-            _ => return None,
+            // Lit::Byte(_lit_byte) => None, // TODO: char and byte
+            // Lit::Char(_lit_char) => None,
+            Lit::Int(lit_int) => Ok(Self::Int(lit_int.base10_digits().to_string())),
+            Lit::Bool(lit_bool) => Ok(Self::Bool(lit_bool.value)),
+            _ => Err(syn::Error::new(lit.span(), "invalid literal")),
         }
     }
 
@@ -76,6 +79,13 @@ impl ToTokens for NiceTypeLit {
     }
 }
 
+impl Parse for NiceTypeLit {
+    fn parse(input: ParseStream) -> Result<Self, syn::Error> {
+        let lit = input.parse()?;
+        Self::from_lit(&lit)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum NiceType<P> {
     Never,
@@ -85,17 +95,20 @@ pub enum NiceType<P> {
 }
 
 impl NiceType<Infallible> {
-    pub fn from_type(ty: &Type) -> Option<Self> {
+    pub fn from_type(ty: &Type) -> syn::Result<Self> {
         match ty {
-            Type::Never(_type_never) => Some(Self::Never),
+            Type::Never(_type_never) => Ok(Self::Never),
             Type::Paren(type_paren) => Self::from_type(&type_paren.elem),
             Type::Path(type_path) => {
                 if type_path.qself.is_some() {
-                    return None;
+                    return Err(syn::Error::new(type_path.span(), "invalid path"));
                 }
                 let mut segments_iter = type_path.path.segments.iter();
                 match (segments_iter.next(), segments_iter.next()) {
-                    (_, Some(_)) | (None, _) => return None,
+                    (_, Some(_)) | (None, _) => Err(syn::Error::new(
+                        type_path.span(),
+                        "invalid path (:: not allowed)",
+                    )),
                     (Some(segment), _) => {
                         let mut tys = Vec::new();
                         match &segment.arguments {
@@ -108,19 +121,29 @@ impl NiceType<Infallible> {
                                         }
                                         GenericArgument::Const(Expr::Lit(lit)) => tys
                                             .push(Self::Literal(NiceTypeLit::from_lit(&lit.lit)?)),
-                                        GenericArgument::Const(_) => return None,
-                                        _ => return None,
+                                        GenericArgument::Const(cons) => {
+                                            return Err(syn::Error::new(
+                                                cons.span(),
+                                                "invalid what",
+                                            ));
+                                        }
+                                        arg => {
+                                            return Err(syn::Error::new(
+                                                arg.span(),
+                                                "invalid what",
+                                            ));
+                                        }
                                     };
                                 }
                             }
-                            _ => return None,
+                            args => return Err(syn::Error::new(args.span(), "invalid what")),
                         };
 
-                        Some(Self::Ident(segment.ident.to_string(), tys))
+                        Ok(Self::Ident(segment.ident.to_string(), tys))
                     }
                 }
             }
-            _ => None,
+            ty => Err(syn::Error::new(ty.span(), "invalid type")),
         }
     }
 
@@ -163,6 +186,26 @@ impl NiceType<Infallible> {
                 .collect(),
             (Self::Literal(_lit), NiceType::Literal(_pat_lit)) => BTreeMap::new(),
             _ => BTreeMap::new(),
+        }
+    }
+
+    pub fn replace_ident(&self, find: &String, replace: &NiceTypeLit) -> Self {
+        match self {
+            Self::Never => Self::Never,
+            Self::Ident(name, tys) => {
+                if name == find {
+                    Self::Literal(replace.clone())
+                } else {
+                    Self::Ident(
+                        name.clone(),
+                        tys.iter()
+                            .map(|ty| ty.replace_ident(find, replace))
+                            .collect(),
+                    )
+                }
+            }
+            Self::Literal(lit) => Self::Literal(lit.clone()),
+            Self::PatternIdent(x) => x.absurd(),
         }
     }
 
@@ -318,5 +361,13 @@ impl<P: ToTokens> ToTokens for NiceType<P> {
             Self::Literal(lit) => lit.to_tokens(tokens),
             Self::PatternIdent(p) => p.to_tokens(tokens),
         };
+    }
+}
+
+impl Parse for NiceType<Infallible> {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        // TODO: nicer?
+        let ty: Type = input.parse()?;
+        NiceType::from_type(&ty)
     }
 }

@@ -1,15 +1,18 @@
+use crate::expand::extract_expansion;
 use crate::nice_type::Infallible;
 use crate::nice_type::NiceType;
 use heck::ToSnakeCase;
+use nice_type::NiceTypeLit;
 use proc_macro::TokenStream;
 use quote::ToTokens;
 use quote::TokenStreamExt;
 use quote::format_ident;
 use quote::quote;
 use std::collections::BTreeMap;
+use syn::Attribute;
+use syn::Expr;
 use syn::Ident;
 use syn::Token;
-use syn::Type;
 use syn::Visibility;
 use syn::braced;
 use syn::parenthesized;
@@ -18,19 +21,20 @@ use syn::parse::ParseStream;
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
 
+mod expand;
 mod nice_type;
 
 const INTERNAL_IDENT: &str = "__INTERNAL_IDENT";
 const INTERNAL_FULL_WILDCARD: &str = "__INTERNAL_FULL_WILDCARD";
 
 #[derive(Clone)]
-struct SigmaEnum {
+struct SigmaType {
     visibility: Visibility,
     name: Ident,
     tys: Vec<NiceType<Infallible>>,
 }
 
-impl SigmaEnum {
+impl SigmaType {
     fn variant_names(&self) -> Vec<Ident> {
         self.tys
             .iter()
@@ -51,9 +55,9 @@ impl SigmaEnum {
     }
 }
 
-impl ToTokens for SigmaEnum {
+impl ToTokens for SigmaType {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let SigmaEnum {
+        let SigmaType {
             visibility,
             name,
             tys,
@@ -231,7 +235,7 @@ impl ToTokens for SigmaEnum {
     }
 }
 
-impl Parse for SigmaEnum {
+impl Parse for SigmaType {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let visibility: Visibility = input.parse()?;
         input.parse::<Token![enum]>()?;
@@ -239,19 +243,69 @@ impl Parse for SigmaEnum {
         let content;
         braced!(content in input);
         let mut tys = Vec::new();
-        while content.peek(Ident) {
+        while !content.is_empty() {
+            let mut expand = BTreeMap::new();
+            if let Ok(attrs) = content.call(Attribute::parse_outer) {
+                for attr in attrs {
+                    if attr.path().is_ident("sigma_type") {
+                        attr.parse_nested_meta(|meta| {
+                            if meta.path.is_ident("expand") {
+                                meta.parse_nested_meta(|meta| {
+                                    let ident = meta.path.require_ident()?;
+                                    let value: Expr = meta.value()?.parse()?;
+                                    let value = extract_expansion(&value)?;
+                                    if expand.contains_key(ident) {
+                                        return Err(syn::Error::new(
+                                            ident.span(),
+                                            "duplicate variable",
+                                        ));
+                                    }
+                                    expand.insert(ident.clone(), value);
+                                    Ok(())
+                                })?;
+                            }
+                            Ok(())
+                        })?;
+                    }
+                }
+            }
+
             let _var_name: Ident = content.parse()?;
             let ty_paren;
             parenthesized!(ty_paren in content);
-            let ty: Type = ty_paren.parse()?;
+            let nice_type: NiceType<Infallible> = ty_paren.parse()?;
             assert!(ty_paren.is_empty());
-            tys.push(
-                NiceType::from_type(&ty).ok_or(syn::Error::new(ty.span(), "type is not nice"))?,
-            );
             let _ = content.parse::<Token![,]>();
+
+            let cartesian: Vec<Vec<(Ident, NiceTypeLit)>> =
+                expand
+                    .into_iter()
+                    .fold(vec![Vec::new()], |accum, (ident, range)| {
+                        accum
+                            .into_iter()
+                            .flat_map(|a| {
+                                range.iter().map({
+                                    let ident = ident.clone(); // why clone it twice
+                                    move |r| {
+                                        let mut a = a.clone();
+                                        a.push((ident.clone(), r.clone()));
+                                        a
+                                    }
+                                })
+                            })
+                            .collect()
+                    });
+
+            for assignments in cartesian {
+                let mut nice_type = nice_type.clone();
+                for (ident, r) in assignments {
+                    nice_type = nice_type.replace_ident(&ident.to_string(), &r)
+                }
+                tys.push(nice_type);
+            }
         }
 
-        Ok(SigmaEnum {
+        Ok(SigmaType {
             visibility,
             name,
             tys,
@@ -262,8 +316,8 @@ impl Parse for SigmaEnum {
 #[proc_macro_attribute]
 pub fn sigma_type(_input: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
-    let sigma_enum = parse_macro_input!(item as SigmaEnum);
+    let sigma_type = parse_macro_input!(item as SigmaType);
 
-    // panic!("{}", quote! { #sigma_enum });
-    quote! { #sigma_enum }.into()
+    // panic!("{}", quote! { #sigma_type });
+    quote! { #sigma_type }.into()
 }

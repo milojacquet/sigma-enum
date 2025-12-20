@@ -31,10 +31,11 @@ struct Nu<const N: usize>();
 
 #[sigma_type]
 enum NuEnum {
-    __(Nu<0>),
-    __(Nu<1>),
-    __(Nu<2>),
-    __(Nu<3>),
+    #[sigma_type(expand(N = 0..=3))]
+    __(Nu<N>),
+    __(Nu<5>),
+    #[sigma_type(expand(N = [7..9, 11]))]
+    __(Nu<N>),
 }
 
 #[test]

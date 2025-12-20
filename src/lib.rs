@@ -325,7 +325,7 @@ impl Parse for SigmaType {
     }
 }
 
-#[proc_macro]
+#[proc_macro_attribute]
 pub fn sigma_type(_input: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
     let sigma_type = parse_macro_input!(item as SigmaType);

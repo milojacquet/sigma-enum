@@ -41,6 +41,15 @@ enum NuEnum {
 #[sigma_type]
 enum EmptyEnum {}
 
+#[cfg(FALSE)]
+enum NuEnum {
+    #[sigma_type(expand(N = 0..=3))]
+    __(Nu<N>),
+    __(Nu<5>),
+    #[sigma_type(expand(N = [7..9, 11]))]
+    __(Nu<N>),
+}
+
 #[test]
 fn match_ab_enum() {
     assert_eq!(

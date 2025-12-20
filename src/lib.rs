@@ -133,12 +133,7 @@ impl ToTokens for SigmaType {
                         .iter()
                         .map(|param| {
                             let param = param.map_pattern(|p| quote! { ? $ #p :ident });
-                            match param {
-                                NiceType::PatternIdent(_) => {
-                                    param.map_pattern(|p| quote! { ( #p ) })
-                                }
-                                param => param,
-                            }
+                            quote! { ( #param ) }
                         })
                         .collect(),
                 ),

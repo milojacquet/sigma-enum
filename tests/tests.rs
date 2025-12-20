@@ -27,28 +27,20 @@ enum FooEnum {
     __(Foo<B>),
 }
 
-struct Nu<const N: usize>();
+struct Mu<const N: usize>;
+struct Nu<M>(M);
 
 #[sigma_type]
 enum NuEnum {
     #[sigma_type(expand(N = 0..=3))]
-    __(Nu<N>),
-    __(Nu<5>),
+    __(Nu<Mu<N>>),
+    __(Nu<Mu<5>>),
     #[sigma_type(expand(N = [7..9, 11]))]
-    __(Nu<N>),
+    __(Nu<Mu<N>>),
 }
 
 #[sigma_type]
 enum EmptyEnum {}
-
-#[cfg(FALSE)]
-enum NuEnum {
-    #[sigma_type(expand(N = 0..=3))]
-    __(Nu<N>),
-    __(Nu<5>),
-    #[sigma_type(expand(N = [7..9, 11]))]
-    __(Nu<N>),
-}
 
 #[test]
 fn match_ab_enum() {
@@ -73,15 +65,15 @@ fn match_ab_enum() {
 fn match_foo_enum() {
     assert_eq!(
         foo_enum_match!(match FooEnum::Foo_B(Foo(B)) {
-            Foo::<A>(_foo) => 1,
-            Foo::<B>(_foo) => 2,
+            Foo::<(A)>(_foo) => 1,
+            Foo::<(B)>(_foo) => 2,
         }),
         2
     );
 
     assert!(foo_enum_match!(match FooEnum::Foo_A(Foo(A)) {
         Foo::<(?T)>(foo) => foo.is_a(),
-        Foo::<A>(_foo) => false, // intentionally does not match
+        Foo::<(A)>(_foo) => false, // intentionally does not match
     }),);
 
     assert!(foo_enum_match!(match FooEnum::Foo_A(Foo(A)) {
@@ -92,9 +84,9 @@ fn match_foo_enum() {
 #[test]
 fn match_nu_enum() {
     assert_eq!(
-        nu_enum_match!(match (NuEnum::Nu_2(Nu())) {
-            Nu::<0>(_foo) => 9,
-            Nu::<(?N)>(_foo) => N,
+        nu_enum_match!(match (NuEnum::Nu_Mu_2(Nu(Mu))) {
+            Nu::<(Mu<0>)>(_nu) => 9,
+            Nu::<(Mu<?N>)>(_nu) => N,
         }),
         2
     );

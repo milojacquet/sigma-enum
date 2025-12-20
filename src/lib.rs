@@ -70,6 +70,11 @@ impl ToTokens for SigmaType {
         let macro_match_variant = self.macro_internal_name("variant");
         let macro_match_pattern = self.macro_internal_name("pattern");
 
+        let macro_use = match self.visibility {
+            Visibility::Public(_) => quote! { #[macro_use] },
+            _ => quote! {},
+        };
+
         let internal_full_wildcard = format_ident!("{INTERNAL_FULL_WILDCARD}");
 
         let mut patterns_map = BTreeMap::new();
@@ -149,6 +154,7 @@ impl ToTokens for SigmaType {
         });
 
         tokens.append_all(quote! {
+            #macro_use
             macro_rules! #macro_match {
                 ( match $( $rest:tt )* ) => {
                     #macro_match_body ! { (), ( $($rest)* ) }
@@ -157,6 +163,7 @@ impl ToTokens for SigmaType {
         });
 
         tokens.append_all(quote! {
+            #macro_use
             #[doc(hidden)]
             macro_rules! #macro_match_body {
                 ( $what:tt, ({
@@ -171,6 +178,7 @@ impl ToTokens for SigmaType {
         });
 
         tokens.append_all(quote! {
+            #macro_use
             #[doc(hidden)]
             macro_rules! #macro_match_process_body {
                 ( $what:tt, (), ( $( ( $tyn:ident $(, $( $ty:tt ),* )?; $binding:pat => $body:expr ) )* ) ) => {
@@ -214,6 +222,7 @@ impl ToTokens for SigmaType {
         });
 
         tokens.append_all(quote! {
+            #macro_use
             #[doc(hidden)]
             macro_rules! #macro_match_variant {
                 #( ( #pat_vars_names #( , #pat_vars_params ),*; $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
@@ -226,6 +235,7 @@ impl ToTokens for SigmaType {
         });
 
         tokens.append_all(quote! {
+            #macro_use
             #[doc(hidden)]
             macro_rules! #macro_match_pattern {
                 #( ( #pat_vars_names #( , #pat_vars_params )* ) => {

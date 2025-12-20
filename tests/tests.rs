@@ -22,7 +22,7 @@ impl Foo<B> {
 }
 
 #[sigma_type]
-enum FooEnum {
+pub enum FooEnum {
     __(Foo<A>),
     __(Foo<B>),
 }

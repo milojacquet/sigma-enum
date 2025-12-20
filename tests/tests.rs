@@ -4,7 +4,7 @@ struct A;
 struct B;
 
 #[sigma_type]
-enum AbEnum {
+pub enum AbEnum {
     __(A),
     __(B),
 }
@@ -22,7 +22,7 @@ impl Foo<B> {
 }
 
 #[sigma_type]
-pub enum FooEnum {
+enum FooEnum {
     __(Foo<A>),
     __(Foo<B>),
 }

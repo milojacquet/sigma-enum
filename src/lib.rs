@@ -155,6 +155,7 @@ impl ToTokens for SigmaType {
 
         tokens.append_all(quote! {
             #macro_use
+            #[allow(unused_macros)]
             macro_rules! #macro_match {
                 ( match $( $rest:tt )* ) => {
                     #macro_match_body ! { (), ( $($rest)* ) }
@@ -324,7 +325,7 @@ impl Parse for SigmaType {
     }
 }
 
-#[proc_macro_attribute]
+#[proc_macro]
 pub fn sigma_type(_input: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
     let sigma_type = parse_macro_input!(item as SigmaType);

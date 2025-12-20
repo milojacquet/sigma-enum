@@ -209,7 +209,7 @@ impl ToTokens for SigmaType {
                 };
                 (
                     $what:tt,
-                    ( $binding:pat => $body:expr, $( $rest:tt )* ),
+                    ( $binding:ident => $body:expr, $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
                     #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( #internal_full_wildcard ; $binding => $body ) ) )

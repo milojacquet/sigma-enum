@@ -73,6 +73,7 @@ impl ToTokens for SigmaType {
         let internal_full_wildcard = format_ident!("{INTERNAL_FULL_WILDCARD}");
 
         let mut patterns_map = BTreeMap::new();
+        patterns_map.insert(NiceType::PatternIdent(()), Vec::new());
         for ty in tys {
             for pat in ty.patterns_matching() {
                 let matches = patterns_map.entry(pat).or_insert(Vec::new());

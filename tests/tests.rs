@@ -38,6 +38,9 @@ enum NuEnum {
     __(Nu<N>),
 }
 
+#[sigma_type]
+enum EmptyEnum {}
+
 #[test]
 fn match_ab_enum() {
     assert_eq!(

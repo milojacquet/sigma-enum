@@ -31,15 +31,12 @@ const INTERNAL_FULL_WILDCARD: &str = "__INTERNAL_FULL_WILDCARD";
 struct SigmaType {
     visibility: Visibility,
     name: Ident,
-    tys: Vec<NiceType<Infallible>>,
+    variants: Vec<(NiceType<Infallible>, Ident)>,
 }
 
 impl SigmaType {
-    fn variant_names(&self) -> Vec<Ident> {
-        self.tys
-            .iter()
-            .map(|ty| format_ident!("{}", ty.variant_name()))
-            .collect()
+    fn variant_names(&self) -> Vec<&Ident> {
+        self.variants.iter().map(|(_, name)| name).collect()
     }
 
     fn macro_match_name(&self) -> Ident {
@@ -60,9 +57,10 @@ impl ToTokens for SigmaType {
         let SigmaType {
             visibility,
             name,
-            tys,
+            variants,
         } = &self;
-        let variant_names = self.variant_names();
+        let variant_tys = self.variants.iter().map(|(ty, _name)| ty);
+        let variant_names = self.variants.iter().map(|(_ty, name)| name);
 
         let macro_match = self.macro_match_name();
         let macro_match_body = self.macro_internal_name("body");
@@ -79,7 +77,7 @@ impl ToTokens for SigmaType {
 
         let mut patterns_map = BTreeMap::new();
         patterns_map.insert(NiceType::PatternIdent(()), Vec::new());
-        for ty in tys {
+        for (ty, _) in variants {
             for pat in ty.patterns_matching() {
                 let matches = patterns_map.entry(pat).or_insert(Vec::new());
                 matches.push(ty);
@@ -144,7 +142,7 @@ impl ToTokens for SigmaType {
 
         tokens.append_all(quote! {
             #visibility enum #name {
-                #(#variant_names(#tys),)*
+                #(#variant_names(#variant_tys),)*
             }
         });
 
@@ -245,31 +243,37 @@ impl ToTokens for SigmaType {
 impl Parse for SigmaType {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let visibility: Visibility = input.parse()?;
-        input.parse::<Token![enum]>()?;
+        let _: Token![enum] = input.parse()?;
         let name: Ident = input.parse()?;
         let content;
         braced!(content in input);
-        let mut tys = Vec::new();
+        let mut variants = Vec::new();
         while !content.is_empty() {
             let mut expand = BTreeMap::new();
+            // let mut rename = BTreeMap::new();
             if let Ok(attrs) = content.call(Attribute::parse_outer) {
                 for attr in attrs {
                     if attr.path().is_ident("sigma_type") {
                         attr.parse_nested_meta(|meta| {
-                            if meta.path.is_ident("expand") {
-                                meta.parse_nested_meta(|meta| {
-                                    let ident = meta.path.require_ident()?;
-                                    let value: Expr = meta.value()?.parse()?;
-                                    let value = extract_expansion(&value)?;
-                                    if expand.contains_key(ident) {
-                                        return Err(syn::Error::new(
-                                            ident.span(),
-                                            "duplicate variable",
-                                        ));
-                                    }
-                                    expand.insert(ident.clone(), value);
-                                    Ok(())
-                                })?;
+                            match meta.path.require_ident()?.to_string().as_str() {
+                                "expand" => {
+                                    meta.parse_nested_meta(|meta| {
+                                        let ident = meta.path.require_ident()?;
+                                        let value: Expr = meta.value()?.parse()?;
+                                        let value = extract_expansion(&value)?;
+                                        if expand.contains_key(ident) {
+                                            return Err(syn::Error::new(
+                                                ident.span(),
+                                                "duplicate expansion",
+                                            ));
+                                        }
+                                        expand.insert(ident.clone(), value);
+                                        Ok(())
+                                    })?;
+                                }
+                                _ => {
+                                    return Err(syn::Error::new(meta.path.span(), "invalid attr"));
+                                }
                             }
                             Ok(())
                         })?;
@@ -308,14 +312,15 @@ impl Parse for SigmaType {
                 for (ident, r) in assignments {
                     nice_type = nice_type.replace_ident(&ident.to_string(), &r)
                 }
-                tys.push(nice_type);
+                let name = nice_type.variant_name();
+                variants.push((nice_type, name));
             }
         }
 
         Ok(SigmaType {
             visibility,
             name,
-            tys,
+            variants,
         })
     }
 }

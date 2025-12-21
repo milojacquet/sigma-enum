@@ -65,6 +65,7 @@ impl ToTokens for SigmaType {
         let macro_match = self.macro_match_name();
         let macro_match_body = self.macro_internal_name("body");
         let macro_match_process_body = self.macro_internal_name("process_body");
+        let macro_match_process_type = self.macro_internal_name("process_type");
         let macro_match_variant = self.macro_internal_name("variant");
         let macro_match_pattern = self.macro_internal_name("pattern");
 
@@ -125,17 +126,20 @@ impl ToTokens for SigmaType {
         let (pat_vars_names, pat_vars_params): (Vec<_>, Vec<_>) = patterns_vars
             .iter()
             .map(|pat| match pat {
-                NiceType::Ident(name, params) => (
-                    format_ident!("{}", name),
-                    params
+                NiceType::Ident(name, params) => (format_ident!("{}", name), {
+                    let params: Vec<_> = params
                         .iter()
-                        .map(|param| {
-                            let param = param.map_pattern(|p| quote! { ? $ #p :ident });
-                            quote! { ( #param ) }
-                        })
-                        .collect(),
+                        .map(|param| param.map_pattern(|p| quote! { ? $ #p :ident }))
+                        .collect();
+                    (!params.is_empty())
+                        .then_some(params)
+                        .into_iter()
+                        .collect::<Vec<_>>()
+                }),
+                NiceType::PatternIdent(_p) => (
+                    internal_full_wildcard.clone(),
+                    None.into_iter().collect::<Vec<_>>(),
                 ),
-                NiceType::PatternIdent(_p) => (internal_full_wildcard.clone(), Vec::new()),
                 _ => panic!("not ident {:?}", pat),
             })
             .unzip();
@@ -175,42 +179,93 @@ impl ToTokens for SigmaType {
             #macro_use
             #[doc(hidden)]
             macro_rules! #macro_match_process_body {
-                ( $what:tt, (), ( $( ( $tyn:ident $(, $( $ty:tt ),* )?; $binding:pat => $body:expr ) )* ) ) => {
+                ( $what:tt, (), ( $( ( $ty:tt; $binding:pat => $body:expr ) )* ) ) => {
                     {
                         let what = $what;
 
                         #[allow(unreachable_patterns)]
                         match what {
-                            $( #macro_match_pattern !($tyn $(, $($ty),* )?) => (), )*
-                        };
+                            $( #macro_match_pattern !($ty) => (), )*
+                        }
 
                         #[allow(unused_labels)]
                         'ma: {
-                            $( #macro_match_variant !{$tyn $(, $($ty),* )?; what; 'ma; $binding => $body} )*
+                            $( #macro_match_variant !{$ty; what; 'ma; $binding => $body} )*
                             unreachable!();
                         }
                     }
                 };
                 (
                     $what:tt,
-                    ( $tyn:ident $( ::< $($ty:tt),* $(,)? > )? ( $binding:pat ) => { $( $body:tt )* } $( $rest:tt )* ),
+                    ( $binding:ident => { $( $body:tt )* } $(,)? $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( $tyn $(, $($ty),* )?; $binding => { $($body)* } ) ) )
-                };
-                (
-                    $what:tt,
-                    ( $tyn:ident $( ::< $($ty:tt),* $(,)? > )? ( $binding:pat ) => $body:expr, $( $rest:tt )* ),
-                    ( $( $matched:tt )* )
-                ) => {
-                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( $tyn $(, $($ty),* )?; $binding => $body ) ) )
+                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => $body ) ) )
                 };
                 (
                     $what:tt,
                     ( $binding:ident => $body:expr, $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( #internal_full_wildcard ; $binding => $body ) ) )
+                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => { $body } ) ) )
+                };
+                (
+                    $what:tt,
+                    ( $tyn:ident ( $binding:pat ) => { $( $body:tt )* } $(,)? $( $rest:tt )* ),
+                    ( $( $matched:tt )* )
+                ) => {
+                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn); $binding => { $($body)* } ) ) )
+                };
+                (
+                    $what:tt,
+                    ( $tyn:ident ( $binding:pat ) => $body:expr, $( $rest:tt )* ),
+                    ( $( $matched:tt )* )
+                ) => {
+                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn); $binding => { $body } ) ) )
+                };
+                (
+                    $what:tt,
+                    ( $tyn:ident ::< $( $rest:tt )* ),
+                    ( $( $matched:tt )* )
+                ) => {
+                    #macro_match_process_type !( ($what, $tyn, ($( $matched )*)), ($( $rest )*), (<), (<) )
+                };
+            }
+        });
+
+        tokens.append_all(quote! {
+            #macro_use
+            #[doc(hidden)]
+            macro_rules! #macro_match_process_type {
+                ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), (< $($counter:tt)*) ) => {
+                    #macro_match_process_type ! ( $bundle, ($($rest)*), ($($params)* >), ($($counter)*) )
+                };
+                ( $bundle:tt, (>> $($rest:tt)*), ( $($params:tt)* ), (< < $($counter:tt)*) ) => {
+                    #macro_match_process_type ! ( $bundle, ($($rest)*), ($($params)* > >), ($($counter)*) )
+                };
+                ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), () ) => {
+                    compile_error!("imbalanced")
+                };
+                ( $bundle:tt, (>> $($rest:tt)*), ( $($params:tt)* ), () ) => {
+                    compile_error!("imbalanced")
+                };
+                ( $bundle:tt, (< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
+                    #macro_match_process_type ! ( $bundle, ($($rest)*), ($($params)* <), (< $($counter)*) )
+                };
+                ( $bundle:tt, (<< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
+                    #macro_match_process_type ! ( $bundle, ($($rest)*), ($($params)* < <), (< < $($counter)*) )
+                };
+                ( ($what:tt, $tyn:ident, ( $($matched:tt)* )), (( $binding:pat ) => { $( $body:tt )* } $(,)? $($rest:tt)*), ( $($params:tt)* ), () ) => {
+                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $($body)* } ) ) )
+                };
+                ( ($what:tt, $tyn:ident, ( $($matched:tt)* )), (( $binding:pat ) => $body:expr, $($rest:tt)*), ( $($params:tt)* ), () ) => {
+                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $body } ) ) )
+                };
+                ( $bundle:tt, (( $($any:tt)* ) $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
+                    compile_error!("imbalanced or something")
+                };
+                ( $bundle:tt, ($thing:tt $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
+                    #macro_match_process_type ! ( $bundle, ($($rest)*), ($($params)* $thing), ( $($counter)*) )
                 };
             }
         });
@@ -219,7 +274,7 @@ impl ToTokens for SigmaType {
             #macro_use
             #[doc(hidden)]
             macro_rules! #macro_match_variant {
-                #( ( #pat_vars_names #( , #pat_vars_params ),*; $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
+                #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
                     #( if let #name :: #pat_variant_names ($binding) = $what {
                         #( #[allow(nonstandard_style)] let $ #pat_variant_assocs_keys = #pat_variant_assocs_values; )*
                         break $ma($body);
@@ -232,7 +287,7 @@ impl ToTokens for SigmaType {
             #macro_use
             #[doc(hidden)]
             macro_rules! #macro_match_pattern {
-                #( ( #pat_vars_names #( , #pat_vars_params )* ) => {
+                #( ( ( #pat_vars_names #(::< #( #pat_vars_params ),* >)* ) ) => {
                     #( #name :: #pat_variant_names (_) )|*
                 }; )*
             }

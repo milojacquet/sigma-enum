@@ -65,15 +65,15 @@ fn match_ab_enum() {
 fn match_foo_enum() {
     assert_eq!(
         foo_enum_match!(match FooEnum::Foo_B(Foo(B)) {
-            Foo::<(A)>(_foo) => 1,
-            Foo::<(B)>(_foo) => 2,
+            Foo::<A>(_foo) => 1,
+            Foo::<B>(_foo) => 2,
         }),
         2
     );
 
     assert!(foo_enum_match!(match FooEnum::Foo_A(Foo(A)) {
-        Foo::<(?T)>(foo) => foo.is_a(),
-        Foo::<(A)>(_foo) => false, // intentionally does not match
+        Foo::<?T>(foo) => foo.is_a(),
+        Foo::<A>(_foo) => false, // intentionally does not match
     }),);
 
     assert!(foo_enum_match!(match FooEnum::Foo_A(Foo(A)) {
@@ -85,8 +85,8 @@ fn match_foo_enum() {
 fn match_nu_enum() {
     assert_eq!(
         nu_enum_match!(match (NuEnum::Nu_Mu_2(Nu(Mu))) {
-            Nu::<(Mu<0>)>(_nu) => 9,
-            Nu::<(Mu<?N>)>(_nu) => N,
+            Nu::<Mu<0>>(_nu) => 9,
+            Nu::<Mu<?N>>(_nu) => N,
         }),
         2
     );

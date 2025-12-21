@@ -1,7 +1,71 @@
 use crate::nice_type::NiceTypeLit;
+use std::collections::BTreeMap;
 use syn::Expr;
 use syn::ExprRange;
+use syn::Ident;
+use syn::Meta;
+use syn::MetaList;
+use syn::Token;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::parse::Parser;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
+
+#[derive(Debug, Clone)]
+struct GenericSpec(Ident, Vec<Option<Ident>>);
+
+impl Parse for GenericSpec {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let ident: Ident = input.parse()?;
+        let _: Token![<] = input.parse()?;
+        let params = Punctuated::<_, Token![,]>::parse_separated_nonempty_with(
+            input,
+            |input: ParseStream| {
+                // it can only be a single ident or _
+                if input.parse::<Token![_]>().is_ok() {
+                    Ok(None)
+                } else {
+                    input.parse::<Ident>().map(Some)
+                }
+            },
+        )?
+        .into_iter()
+        .collect();
+        let _: Token![>] = input.parse()?;
+        Ok(Self(ident, params))
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct ItemAttr {
+    pub generics: BTreeMap<Ident, Vec<Option<Ident>>>,
+}
+
+impl Parse for ItemAttr {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut out = Self::default();
+        let metas: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(input)?;
+        for meta in metas {
+            match meta.path().require_ident()?.to_string().as_str() {
+                "generic" => {
+                    let Meta::List(MetaList { tokens, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let generics: Punctuated<GenericSpec, Token![,]> =
+                        Parser::parse2(Punctuated::parse_terminated, tokens)?;
+                    for GenericSpec(ident, params) in generics {
+                        if out.generics.insert(ident.clone(), params).is_some() {
+                            return Err(syn::Error::new(ident.span(), "duplicate ident"));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(out)
+    }
+}
 
 fn extract_expansion_range(expr: &ExprRange) -> syn::Result<Vec<NiceTypeLit>> {
     let start = match &expr.start {

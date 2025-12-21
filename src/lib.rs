@@ -1,6 +1,7 @@
-use crate::expand::extract_expansion;
+use crate::attrs::extract_expansion;
 use crate::nice_type::Infallible;
 use crate::nice_type::NiceType;
+use attrs::ItemAttr;
 use heck::ToSnakeCase;
 use nice_type::NiceTypeLit;
 use proc_macro::TokenStream;
@@ -21,7 +22,7 @@ use syn::parse::ParseStream;
 use syn::parse_macro_input;
 use syn::spanned::Spanned;
 
-mod expand;
+mod attrs;
 mod nice_type;
 
 const INTERNAL_IDENT: &str = "__INTERNAL_IDENT";
@@ -31,12 +32,13 @@ const INTERNAL_FULL_WILDCARD: &str = "__INTERNAL_FULL_WILDCARD";
 struct SigmaType {
     visibility: Visibility,
     name: Ident,
-    variants: Vec<(NiceType<Infallible>, Ident)>,
+    variants: Vec<NiceType<Infallible>>,
+    attr: ItemAttr,
 }
 
 impl SigmaType {
-    fn variant_names(&self) -> Vec<&Ident> {
-        self.variants.iter().map(|(_, name)| name).collect()
+    fn variant_name(&self, variant: &NiceType<Infallible>) -> Ident {
+        variant.variant_name()
     }
 
     fn macro_match_name(&self) -> Ident {
@@ -58,9 +60,9 @@ impl ToTokens for SigmaType {
             visibility,
             name,
             variants,
+            attr: _,
         } = &self;
-        let variant_tys = self.variants.iter().map(|(ty, _name)| ty);
-        let variant_names = self.variants.iter().map(|(_ty, name)| name);
+        let variant_names = self.variants.iter().map(|var| self.variant_name(&var));
 
         let macro_match = self.macro_match_name();
         let macro_match_body = self.macro_internal_name("body");
@@ -78,7 +80,7 @@ impl ToTokens for SigmaType {
 
         let mut patterns_map = BTreeMap::new();
         patterns_map.insert(NiceType::PatternIdent(()), Vec::new());
-        for (ty, _) in variants {
+        for ty in variants {
             for pat in ty.patterns_matching() {
                 let matches = patterns_map.entry(pat).or_insert(Vec::new());
                 matches.push(ty);
@@ -95,7 +97,9 @@ impl ToTokens for SigmaType {
             .collect();
 
         let patterns_vars: Vec<_> = patterns.iter().map(|pat| pat.index_patterns()).collect();
-        let pat_variant_assocs: Vec<Vec<BTreeMap<_, _>>> = pat_variants
+        // for each pattern, for each variant it matches, get the type pattern variables
+        // and their literals and locations, and generate let statements for them
+        let const_let_statements: Vec<Vec<proc_macro2::TokenStream>> = pat_variants
             .iter()
             .zip(&patterns_vars)
             .map(|(v, pat)| {
@@ -103,26 +107,30 @@ impl ToTokens for SigmaType {
                     .map(|ty| {
                         ty.matches_map(&pat)
                             .into_iter()
-                            .filter_map(|(p, ty)| {
+                            .filter_map(|(ident, (ty, location))| {
                                 if let NiceType::Literal(lit) = ty {
-                                    Some((p, lit))
+                                    // try block. sad
+                                    Some(
+                                        (|| {
+                                            let (parent, i) = location?;
+                                            let generic_ty =
+                                                self.attr.generics.get(&parent)?.get(i)?;
+                                            Some(quote! { const $ #ident : #generic_ty = #lit; })
+                                        })()
+                                        .unwrap_or(quote! { let $ #ident = #lit; }),
+                                    )
                                 } else {
                                     None
                                 }
                             })
+                            .map(|q| quote! { #[allow(nonstandard_style)] #q })
+                            .flatten()
                             .collect()
                     })
                     .collect()
             })
             .collect();
-        let pat_variant_assocs_keys: Vec<Vec<Vec<_>>> = pat_variant_assocs
-            .iter()
-            .map(|v| v.iter().map(|v| v.keys().collect()).collect())
-            .collect();
-        let pat_variant_assocs_values: Vec<Vec<Vec<_>>> = pat_variant_assocs
-            .iter()
-            .map(|v| v.iter().map(|v| v.values().collect()).collect())
-            .collect();
+
         let (pat_vars_names, pat_vars_params): (Vec<_>, Vec<_>) = patterns_vars
             .iter()
             .map(|pat| match pat {
@@ -146,7 +154,7 @@ impl ToTokens for SigmaType {
 
         tokens.append_all(quote! {
             #visibility enum #name {
-                #(#variant_names(#variant_tys),)*
+                #(#variant_names(#variants),)*
             }
         });
 
@@ -276,7 +284,7 @@ impl ToTokens for SigmaType {
             macro_rules! #macro_match_variant {
                 #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
                     #( if let #name :: #pat_variant_names ($binding) = $what {
-                        #( #[allow(nonstandard_style)] let $ #pat_variant_assocs_keys = #pat_variant_assocs_values; )*
+                        #const_let_statements
                         break $ma($body);
                     } )*
                 }; )*
@@ -367,8 +375,7 @@ impl Parse for SigmaType {
                 for (ident, r) in assignments {
                     nice_type = nice_type.replace_ident(&ident.to_string(), &r)
                 }
-                let name = nice_type.variant_name();
-                variants.push((nice_type, name));
+                variants.push(nice_type);
             }
         }
 
@@ -376,14 +383,17 @@ impl Parse for SigmaType {
             visibility,
             name,
             variants,
+            attr: ItemAttr::default(),
         })
     }
 }
 
 #[proc_macro_attribute]
-pub fn sigma_type(_input: TokenStream, item: TokenStream) -> TokenStream {
+pub fn sigma_type(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
-    let sigma_type = parse_macro_input!(item as SigmaType);
+    let mut sigma_type = parse_macro_input!(item as SigmaType);
+    let attr = parse_macro_input!(attr as ItemAttr);
+    sigma_type.attr = attr;
 
     // panic!("{}", quote! { #sigma_type });
     quote! { #sigma_type }.into()

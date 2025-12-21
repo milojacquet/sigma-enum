@@ -175,16 +175,32 @@ impl NiceType<Infallible> {
         }
     }
 
-    pub fn matches_map<P: Ord + Clone>(&self, pat: &NiceType<P>) -> BTreeMap<P, Self> {
+    pub fn matches_map<P: Ord + Clone>(
+        &self,
+        pat: &NiceType<P>,
+    ) -> BTreeMap<P, (Self, Option<(Ident, usize)>)> {
+        self.matches_map_ancestor(pat, None)
+    }
+
+    fn matches_map_ancestor<P: Ord + Clone>(
+        &self,
+        pat: &NiceType<P>,
+        location: Option<(Ident, usize)>,
+    ) -> BTreeMap<P, (Self, Option<(Ident, usize)>)> {
+        // TODO: detect duplicate pat
         match (self, pat) {
-            (ty, NiceType::PatternIdent(p)) => BTreeMap::from_iter([(p.clone(), ty.clone())]),
-            (Self::Never, NiceType::Never) => BTreeMap::new(),
-            (Self::Ident(_name, tys), NiceType::Ident(_pat_name, pat_tys)) => tys
+            (ty, NiceType::PatternIdent(p)) => {
+                BTreeMap::from_iter([(p.clone(), (ty.clone(), location))])
+            }
+            (Self::Ident(name, tys), NiceType::Ident(_pat_name, pat_tys)) => tys
                 .into_iter()
                 .zip(pat_tys)
-                .flat_map(|(ty, pat_ty)| ty.matches_map(pat_ty).into_iter())
+                .enumerate()
+                .flat_map(|(i, (ty, pat_ty))| {
+                    ty.matches_map_ancestor(pat_ty, Some((format_ident!("{}", name), i)))
+                        .into_iter()
+                })
                 .collect(),
-            (Self::Literal(_lit), NiceType::Literal(_pat_lit)) => BTreeMap::new(),
             _ => BTreeMap::new(),
         }
     }

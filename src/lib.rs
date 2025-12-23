@@ -373,7 +373,7 @@ impl Parse for SigmaType {
             // let mut rename = BTreeMap::new();
             if let Ok(attrs) = content.call(Attribute::parse_outer) {
                 for attr in attrs {
-                    if attr.path().is_ident("sigma_type") {
+                    if attr.path().is_ident("sigma_enum") {
                         attr.parse_nested_meta(|meta| {
                             match meta.path.require_ident()?.to_string().as_str() {
                                 "expand" => {
@@ -446,12 +446,12 @@ impl Parse for SigmaType {
 }
 
 #[proc_macro_attribute]
-pub fn sigma_type(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn sigma_enum(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
-    let mut sigma_type = parse_macro_input!(item as SigmaType);
+    let mut sigma_enum = parse_macro_input!(item as SigmaType);
     let attr = parse_macro_input!(attr as ItemAttr);
-    sigma_type.attr = attr;
+    sigma_enum.attr = attr;
 
-    // panic!("{}", quote! { #sigma_type });
-    quote! { #sigma_type }.into()
+    // panic!("{}", quote! { #sigma_enum });
+    quote! { #sigma_enum }.into()
 }

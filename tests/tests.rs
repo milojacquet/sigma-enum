@@ -1,9 +1,9 @@
-use sigma_type::sigma_type;
+use sigma_enum::sigma_enum;
 
 struct A;
 struct B;
 
-#[sigma_type]
+#[sigma_enum]
 pub enum AbEnum {
     __(A),
     __(B),
@@ -21,7 +21,7 @@ impl Foo<B> {
     }
 }
 
-#[sigma_type]
+#[sigma_enum]
 enum FooEnum {
     __(Foo<A>),
     __(Foo<B>),
@@ -32,27 +32,27 @@ struct Mu<const N: usize>([(); N]);
 #[derive(Debug, Clone, Copy)]
 struct Nu<M>(M);
 
-#[sigma_type(
+#[sigma_enum(
     generic(Mu<usize>)
 )]
 enum NuEnum {
-    #[sigma_type(expand(N = 0..=3))]
+    #[sigma_enum(expand(N = 0..=3))]
     __(Nu<Mu<N>>),
     __(Nu<Mu<5>>),
-    #[sigma_type(expand(N = [7..9, 11]))]
+    #[sigma_enum(expand(N = [7..9, 11]))]
     __(Nu<Mu<N>>),
 }
 
-#[sigma_type]
+#[sigma_enum]
 enum NuEnumNoGen {
-    #[sigma_type(expand(N = 0..=3))]
+    #[sigma_enum(expand(N = 0..=3))]
     __(Nu<Mu<N>>),
     __(Nu<Mu<5>>),
-    #[sigma_type(expand(N = [7..9, 11]))]
+    #[sigma_enum(expand(N = [7..9, 11]))]
     __(Nu<Mu<N>>),
 }
 
-#[sigma_type]
+#[sigma_enum]
 enum EmptyEnum {}
 
 #[test]

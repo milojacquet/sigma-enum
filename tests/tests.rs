@@ -27,10 +27,14 @@ enum FooEnum {
     __(Foo<B>),
 }
 
+#[derive(Debug, Clone, Copy)]
 struct Mu<const N: usize>([(); N]);
+#[derive(Debug, Clone, Copy)]
 struct Nu<M>(M);
 
-#[sigma_type(generic(Mu<usize>))]
+#[sigma_type(
+    generic(Mu<usize>)
+)]
 enum NuEnum {
     #[sigma_type(expand(N = 0..=3))]
     __(Nu<Mu<N>>),
@@ -92,21 +96,46 @@ fn match_foo_enum() {
 
 #[test]
 fn match_nu_enum() {
+    // let numu2 = NuEnum::Nu_Mu_2(Nu(Mu([(); 2])));
+    let n = 2;
+    let numu2 = nu_enum_construct!(Nu::<Mu<?n>>({
+        let arr = [(); n];
+        Nu(Mu(arr))
+    }))
+    .unwrap();
+
     assert_eq!(
-        nu_enum_match!(match (NuEnum::Nu_Mu_2(Nu(Mu([(), ()])))) {
+        nu_enum_match!(match numu2 {
             Nu::<Mu<0>>(_nu) => 9,
             Nu::<Mu<?N>>(_nu) => N,
+            _nu => 99,
         }),
         2
     );
 
-    // check const in there
+    let numu2 = nu_enum_construct!(Nu::<Mu<?n>>({
+        let arr = [(); n];
+        Nu(Mu(arr))
+    }))
+    .unwrap(); // check const in there
     assert_eq!(
-        nu_enum_match!(match (NuEnum::Nu_Mu_2(Nu(Mu([(), ()])))) {
+        nu_enum_match!(match numu2 {
             Nu::<Mu<?N>>(_nu) => {
                 let _mu_arr = [(); N];
                 N
             }
+        }),
+        2
+    );
+
+    let numu2 = nu_enum_construct!(Nu::<Mu<?n>>({
+        let arr = [(); n];
+        Nu(Mu(arr))
+    }))
+    .unwrap(); // make sure types don't blow up the let
+    assert_eq!(
+        nu_enum_match!(match numu2 {
+            Nu::<?T>(_nu) => 2,
         }),
         2
     );

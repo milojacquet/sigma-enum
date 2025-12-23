@@ -45,6 +45,10 @@ impl SigmaType {
         format_ident!("{}_match", self.name.to_string().to_snake_case())
     }
 
+    fn macro_construct_name(&self) -> Ident {
+        format_ident!("{}_construct", self.name.to_string().to_snake_case())
+    }
+
     fn macro_internal_name(&self, which: &str) -> Ident {
         format_ident!(
             "{INTERNAL_IDENT}_{}_{}",
@@ -65,11 +69,13 @@ impl ToTokens for SigmaType {
         let variant_names = self.variants.iter().map(|var| self.variant_name(&var));
 
         let macro_match = self.macro_match_name();
+        let macro_construct = self.macro_construct_name();
         let macro_match_body = self.macro_internal_name("body");
         let macro_match_process_body = self.macro_internal_name("process_body");
-        let macro_match_process_type = self.macro_internal_name("process_type");
+        let macro_process_type = self.macro_internal_name("process_type");
         let macro_match_variant = self.macro_internal_name("variant");
         let macro_match_pattern = self.macro_internal_name("pattern");
+        let macro_construct_inner = self.macro_internal_name("construct_inner");
 
         let macro_use = match self.visibility {
             Visibility::Public(_) => quote! { #[macro_use] },
@@ -97,9 +103,7 @@ impl ToTokens for SigmaType {
             .collect();
 
         let patterns_vars: Vec<_> = patterns.iter().map(|pat| pat.index_patterns()).collect();
-        // for each pattern, for each variant it matches, get the type pattern variables
-        // and their literals and locations, and generate let statements for them
-        let const_let_statements: Vec<Vec<proc_macro2::TokenStream>> = pat_variants
+        let patterns_vars_assoc: Vec<Vec<Vec<_>>> = pat_variants
             .iter()
             .zip(&patterns_vars)
             .map(|(v, pat)| {
@@ -108,23 +112,47 @@ impl ToTokens for SigmaType {
                         ty.matches_map(&pat)
                             .into_iter()
                             .filter_map(|(ident, (ty, location))| {
-                                if let NiceType::Literal(lit) = ty {
-                                    // try block. sad
-                                    Some(
-                                        (|| {
-                                            let (parent, i) = location?;
-                                            let generic_ty =
-                                                self.attr.generics.get(&parent)?.get(i)?;
-                                            Some(quote! { const $ #ident : #generic_ty = #lit; })
-                                        })()
-                                        .unwrap_or(quote! { let $ #ident = #lit; }),
-                                    )
-                                } else {
-                                    None
-                                }
+                                let NiceType::Literal(lit) = ty else {
+                                    return None;
+                                };
+                                // try block. sad
+                                let generic_ty = (|| {
+                                    let (parent, i) = location?;
+                                    self.attr.generics.get(&parent)?[i].as_ref()
+                                })();
+                                Some((ident, lit, generic_ty))
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect();
+        // for each pattern, for each variant it matches, get the type pattern variables
+        // and their literals and locations, and generate let statements for them
+        let const_let_statements: Vec<Vec<proc_macro2::TokenStream>> = patterns_vars_assoc
+            .iter()
+            .map(|v| {
+                v.iter()
+                    .map(|v| {
+                        v.iter()
+                            .map(|(ident, lit, generic_ty)| match generic_ty {
+                                Some(generic_ty) => quote! { const $ #ident : #generic_ty = #lit; },
+                                None => quote! { let $ #ident = #lit; },
                             })
                             .map(|q| quote! { #[allow(nonstandard_style)] #q })
-                            .flatten()
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let pat_vars_params_eqs: Vec<Vec<Vec<_>>> = patterns_vars_assoc
+            .iter()
+            .map(|v| {
+                v.iter()
+                    .map(|v| {
+                        v.iter()
+                            .map(|(ident, lit, _generic_ty)| quote! { $ #ident == #lit })
                             .collect()
                     })
                     .collect()
@@ -236,7 +264,7 @@ impl ToTokens for SigmaType {
                     ( $tyn:ident ::< $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #macro_match_process_type !( ($what, $tyn, ($( $matched )*)), ($( $rest )*), (<), (<) )
+                    #macro_process_type !( (@match, $what, $tyn, ($( $matched )*)), ($( $rest )*), (<), (<) )
                 };
             }
         });
@@ -244,12 +272,12 @@ impl ToTokens for SigmaType {
         tokens.append_all(quote! {
             #macro_use
             #[doc(hidden)]
-            macro_rules! #macro_match_process_type {
+            macro_rules! #macro_process_type {
                 ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), (< $($counter:tt)*) ) => {
-                    #macro_match_process_type ! ( $bundle, ($($rest)*), ($($params)* >), ($($counter)*) )
+                    #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* >), ($($counter)*) )
                 };
                 ( $bundle:tt, (>> $($rest:tt)*), ( $($params:tt)* ), (< < $($counter:tt)*) ) => {
-                    #macro_match_process_type ! ( $bundle, ($($rest)*), ($($params)* > >), ($($counter)*) )
+                    #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* > >), ($($counter)*) )
                 };
                 ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), () ) => {
                     compile_error!("imbalanced")
@@ -258,22 +286,25 @@ impl ToTokens for SigmaType {
                     compile_error!("imbalanced")
                 };
                 ( $bundle:tt, (< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    #macro_match_process_type ! ( $bundle, ($($rest)*), ($($params)* <), (< $($counter)*) )
+                    #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* <), (< $($counter)*) )
                 };
                 ( $bundle:tt, (<< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    #macro_match_process_type ! ( $bundle, ($($rest)*), ($($params)* < <), (< < $($counter)*) )
+                    #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* < <), (< < $($counter)*) )
                 };
-                ( ($what:tt, $tyn:ident, ( $($matched:tt)* )), (( $binding:pat ) => { $( $body:tt )* } $(,)? $($rest:tt)*), ( $($params:tt)* ), () ) => {
+                ( (@match, $what:tt, $tyn:ident, ( $($matched:tt)* )), (( $binding:pat ) => { $( $body:tt )* } $(,)? $($rest:tt)*), ( $($params:tt)* ), () ) => {
                     #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $($body)* } ) ) )
                 };
-                ( ($what:tt, $tyn:ident, ( $($matched:tt)* )), (( $binding:pat ) => $body:expr, $($rest:tt)*), ( $($params:tt)* ), () ) => {
+                ( (@match, $what:tt, $tyn:ident, ( $($matched:tt)* )), (( $binding:pat ) => $body:expr, $($rest:tt)*), ( $($params:tt)* ), () ) => {
                     #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $body } ) ) )
+                };
+                ( (@construct, $tyn:ident), (( $expr:expr )), ( $($params:tt)+ ), () ) => {
+                    #macro_construct_inner !( ($tyn :: $($params)+); ( $expr ) )
                 };
                 ( $bundle:tt, (( $($any:tt)* ) $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
                     compile_error!("imbalanced or something")
                 };
                 ( $bundle:tt, ($thing:tt $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    #macro_match_process_type ! ( $bundle, ($($rest)*), ($($params)* $thing), ( $($counter)*) )
+                    #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* $thing), ( $($counter)*) )
                 };
             }
         });
@@ -297,6 +328,32 @@ impl ToTokens for SigmaType {
             macro_rules! #macro_match_pattern {
                 #( ( ( #pat_vars_names #(::< #( #pat_vars_params ),* >)* ) ) => {
                     #( #name :: #pat_variant_names (_) )|*
+                }; )*
+            }
+        });
+
+        tokens.append_all(quote! {
+            #macro_use
+            #[allow(unused_macros)]
+            macro_rules! #macro_construct {
+                ( $tyn:ident ::< $($tt:tt)* ) => {
+                    #macro_process_type !( (@construct, $tyn), ($($tt)*), (<), (<) )
+                };
+            }
+        });
+
+        tokens.append_all(quote! {
+            #macro_use
+            #[doc(hidden)]
+            macro_rules! #macro_construct_inner {
+                #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $body:expr ) => {
+                    'ma: {
+                        #( if true #(&& #pat_vars_params_eqs)* {
+                            #const_let_statements
+                            break 'ma Some(#name :: #pat_variant_names($body));
+                        } )*
+                        None
+                    }
                 }; )*
             }
         });

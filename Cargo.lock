@@ -30,6 +30,13 @@ dependencies = [
 name = "sigma-enum"
 version = "0.1.0"
 dependencies = [
+ "sigma-enum-macros",
+]
+
+[[package]]
+name = "sigma-enum-macros"
+version = "0.1.0"
+dependencies = [
  "heck",
  "proc-macro2",
  "quote",

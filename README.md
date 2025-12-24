@@ -151,8 +151,10 @@ fn displayed(bytes: BytesEnum) -> String {
 
 ## Traits
 
-The `sigma_enum` macro also generates two conversion traits for each macro:
-the construction and destruction traits.
+The `sigma_enum` macro also generates a conversion trait for each macro with
+three methods: construction, extraction, and owned extraction, each for
+types known at compile time. Helper methods on the enum for extraction and
+owned extraction are also generated.
 
 ```rust
 struct Bytes<const N: usize>([u8; N]);
@@ -163,25 +165,32 @@ enum BytesEnum {
     __(Bytes<N>),
 }
 
-let bytes = Bytes([0x41; 2]).into_bytes_enum(); // uses IntoBytesEnum trait
-let bytes: Bytes<2> = [0x41; 2].try_from_bytes_enum().unwrap(); // uses TryFromBytesEnum trait
+let bytes_enum = Bytes([0x41; 2]).into_bytes_enum(); // uses IntoBytesEnum trait
+let bytes: &Bytes<2> = Bytes::<2>::try_from_bytes_enum(&bytes_enum).unwrap(); // uses IntoBytesEnum trait
+let bytes: Bytes<2> = bytes_enum.extract_owned().unwrap();
 ```
 
 These allow the construction and extraction of values with known types.
+
+`From`, `Into`, `TryFrom`, and `TryInto` will also be implemented for the
+enum and all types it contains as variants.
 
 ### Renaming generated items
 
 Generated items can be renamed and docstrings can be provided with the
 following attributes:
 
-| Item                        | Attribute name    |
-| --------------------------- | ----------------- |
-| Construction macro          | `macro_construct` |
-| Match macro                 | `macro_match`     |
-| `Into` enum trait           | `into_trait`      |
-| `Into` enum trait method    | `into_method`     |
-| `TryFrom` enum trait        | `into_trait`      |
-| `TryFrom` enum trait method | `into_method`     |
+| Item                               | Attribute name          |
+| ---------------------------------- | ----------------------- |
+| Construction macro                 | `macro_construct`       |
+| Match macro                        | `macro_match`           |
+| Enum trait                         | `into_trait`            |
+| Enum trait construction method     | `into_method`           |
+| Enum trait extraction method       | `try_from_method`       |
+| Enum trait owned extraction method | `try_from_owned_method` |
+| Enum extraction method             | `extract_method`        |
+| Enum owned extraction method       | `extract_owned_method`  |
+| `TryFrom` error                    | `try_from_error`        |
 
 ```rust
 #[sigma_enum(

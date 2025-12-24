@@ -74,36 +74,39 @@ impl SigmaEnum {
         )
     }
 
-    fn macro_match_docstring(&self) -> proc_macro2::TokenStream {
-        self.attr
-            .macro_match
-            .docs
-            .as_ref()
-            .map_or_else(|| quote! {}, |docs| quote! { #[doc = #docs] })
+    fn try_from_owned_method_name(&self) -> Ident {
+        self.attr.try_from_owned_method.name.as_ref().map_or_else(
+            || format_ident!("try_from_owned_{}", self.name.to_string().to_snake_case()),
+            |name| format_ident!("{}", name),
+        )
     }
 
-    fn macro_construct_docstring(&self) -> proc_macro2::TokenStream {
-        self.attr
-            .macro_construct
-            .docs
-            .as_ref()
-            .map_or_else(|| quote! {}, |docs| quote! { #[doc = #docs] })
+    fn try_from_method_name(&self) -> Ident {
+        self.attr.try_from_method.name.as_ref().map_or_else(
+            || format_ident!("try_from_{}", self.name.to_string().to_snake_case()),
+            |name| format_ident!("{}", name),
+        )
     }
 
-    fn into_trait_docstring(&self) -> proc_macro2::TokenStream {
-        self.attr
-            .into_trait
-            .docs
-            .as_ref()
-            .map_or_else(|| quote! {}, |docs| quote! { #[doc = #docs] })
+    fn extract_owned_method_name(&self) -> Ident {
+        self.attr.extract_owned_method.name.as_ref().map_or_else(
+            || format_ident!("extract_owned"),
+            |name| format_ident!("{}", name),
+        )
     }
 
-    fn into_method_docstring(&self) -> proc_macro2::TokenStream {
-        self.attr
-            .into_method
-            .docs
-            .as_ref()
-            .map_or_else(|| quote! {}, |docs| quote! { #[doc = #docs] })
+    fn extract_method_name(&self) -> Ident {
+        self.attr.extract_method.name.as_ref().map_or_else(
+            || format_ident!("extract"),
+            |name| format_ident!("{}", name),
+        )
+    }
+
+    fn try_from_error_name(&self) -> Ident {
+        self.attr.try_from_error.name.as_ref().map_or_else(
+            || format_ident!("TryFrom{}Error", self.name.to_string()),
+            |name| format_ident!("{}", name),
+        )
     }
 
     fn internal_name(&self, which: &str) -> Ident {
@@ -144,14 +147,24 @@ impl ToTokens for SigmaEnum {
         let into_trait = self.into_trait_name();
         let into_trait_sealed_mod = self.internal_name("into_trait_sealed_mod");
         let into_method = self.into_method_name();
+        let try_from_owned_method = self.try_from_owned_method_name();
+        let try_from_method = self.try_from_method_name();
+        let extract_owned_method = self.extract_owned_method_name();
+        let extract_method = self.extract_method_name();
+        let try_from_error = self.try_from_error_name();
 
-        let macro_match_docstring = self.macro_match_docstring();
-        let macro_construct_docstring = self.macro_construct_docstring();
-        let into_trait_docstring = self.into_trait_docstring();
-        let into_method_docstring = self.into_method_docstring();
+        let macro_match_docstring = self.attr.macro_match.docstring();
+        let macro_construct_docstring = self.attr.macro_construct.docstring();
+        let into_trait_docstring = self.attr.into_trait.docstring();
+        let into_method_docstring = self.attr.into_method.docstring();
+        let try_from_owned_method_docstring = self.attr.try_from_owned_method.docstring();
+        let try_from_method_docstring = self.attr.try_from_method.docstring();
+        let extract_owned_method_docstring = self.attr.extract_owned_method.docstring();
+        let extract_method_docstring = self.attr.extract_method.docstring();
+        let try_from_error_docstring = self.attr.try_from_error.docstring();
 
-        let macro_use = match self.visibility {
-            Visibility::Public(_) => quote! { #[macro_use] },
+        let macro_export = match self.visibility {
+            Visibility::Public(_) => quote! { #[macro_export] },
             _ => quote! {},
         };
 
@@ -264,7 +277,7 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
-            #macro_use
+            #macro_export
             #[allow(unused_macros)]
             #macro_match_docstring
             macro_rules! #macro_match {
@@ -275,7 +288,7 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
-            #macro_use
+            #macro_export
             #[doc(hidden)]
             macro_rules! #macro_match_body {
                 ( $what:tt, ({
@@ -290,7 +303,7 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
-            #macro_use
+            #macro_export
             #[doc(hidden)]
             macro_rules! #macro_match_process_body {
                 ( $what:tt, (), ( $( ( $ty:tt; $binding:pat => $body:expr ) )* ) ) => {
@@ -348,7 +361,7 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
-            #macro_use
+            #macro_export
             #[doc(hidden)]
             macro_rules! #macro_process_type {
                 ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), (< $($counter:tt)*) ) => {
@@ -388,7 +401,7 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
-            #macro_use
+            #macro_export
             #[doc(hidden)]
             macro_rules! #macro_match_variant {
                 #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
@@ -401,7 +414,7 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
-            #macro_use
+            #macro_export
             #[doc(hidden)]
             macro_rules! #macro_match_pattern {
                 #( ( ( #pat_vars_names #(::< #( #pat_vars_params ),* >)* ) ) => {
@@ -411,7 +424,7 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
-            #macro_use
+            #macro_export
             #[allow(unused_macros)]
             #macro_construct_docstring
             macro_rules! #macro_construct {
@@ -422,7 +435,7 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
-            #macro_use
+            #macro_export
             #[doc(hidden)]
             macro_rules! #macro_construct_inner {
                 #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $body:expr ) => {
@@ -437,12 +450,21 @@ impl ToTokens for SigmaEnum {
             }
         });
 
+        let methods = quote! {
+            #into_method_docstring
+            fn #into_method (self) -> #name;
+            #try_from_owned_method_docstring
+            fn #try_from_owned_method (value: #name) -> Option<Self>
+                where Self: ::core::marker::Sized;
+            #try_from_method_docstring
+            fn #try_from_method (value: & #name) -> Option<&Self>;
+        };
+
         if matches!(visibility, Visibility::Public(_)) {
             tokens.append_all(quote! {
                 #into_trait_docstring
                 pub trait #into_trait : #into_trait_sealed_mod ::Sealed {
-                    #into_method_docstring
-                    fn #into_method (self) -> #name;
+                    #methods
                 }
 
                 mod #into_trait_sealed_mod {
@@ -454,25 +476,87 @@ impl ToTokens for SigmaEnum {
         } else {
             tokens.append_all(quote! {
                 #visibility trait #into_trait {
-                    fn #into_method (self) -> #name;
+                    #methods
                 }
             });
         }
 
         tokens.append_all(quote! {
             #(
+                #into_trait_docstring
                 impl #into_trait for #variant_types {
                     fn #into_method (self) -> #name {
                         #name :: #variant_names (self)
                     }
+
+                    fn #try_from_owned_method (value: #name) -> Option<Self>
+                        where Self: ::core::marker::Sized
+                    {
+                        if let #name :: #variant_names (out) = value {
+                            Some(out)
+                        } else {
+                            None
+                        }
+                    }
+
+                    fn #try_from_method <'a>(value: &'a #name) -> Option<&'a Self> {
+                        if let #name :: #variant_names (out) = value {
+                            Some(out)
+                        } else {
+                            None
+                        }
+                    }
                 }
 
-                impl From<#variant_types> for #name {
+                impl ::std::convert::From<#variant_types> for #name {
                     fn from(value: #variant_types) -> Self {
                         value. #into_method ()
                     }
                 }
+
+                impl<'a> ::std::convert::TryFrom<&'a #name> for &'a #variant_types {
+                    type Error = #try_from_error;
+                    fn try_from(value: &'a #name) -> Result<&'a #variant_types, #try_from_error > {
+                       < #variant_types >:: #try_from_method (value).ok_or( #try_from_error )
+                    }
+                }
+
+                impl ::std::convert::TryFrom<#name> for #variant_types
+                        where Self: ::core::marker::Sized
+                {
+                    type Error = #try_from_error;
+                    fn try_from(value: #name) -> Result<#variant_types, #try_from_error > {
+                       < #variant_types >:: #try_from_owned_method (value).ok_or( #try_from_error )
+                    }
+                }
             )*
+
+            impl #name {
+                #extract_owned_method_docstring
+                #visibility fn #extract_owned_method <T: #into_trait >(self) -> Option<T> {
+                    T:: #try_from_owned_method (self)
+                }
+
+                #extract_method_docstring
+                #visibility fn #extract_method <T: #into_trait >(&self) -> Option<&T> {
+                    T:: #try_from_method (self)
+                }
+            }
+
+            #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+            pub struct #try_from_error;
+
+            impl ::std::fmt::Display for #try_from_error {
+                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                    ::std::fmt::Formatter::write_str(f, "attempted to extract value from a ")?;
+                    ::std::fmt::Formatter::write_str(f, stringify!( #name ))?;
+                    ::std::fmt::Formatter::write_str(f, " holding a different type")?;
+                    Ok(())
+                }
+            }
+
+            #try_from_error_docstring
+            impl ::std::error::Error for #try_from_error {}
         });
     }
 }

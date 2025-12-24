@@ -1,4 +1,5 @@
 use crate::nice_type::NiceTypeLit;
+use quote::quote;
 use std::collections::BTreeMap;
 use syn::Expr;
 use syn::ExprLit;
@@ -47,6 +48,14 @@ pub struct PublicItem {
     pub docs: Option<String>,
 }
 
+impl PublicItem {
+    pub fn docstring(&self) -> proc_macro2::TokenStream {
+        self.docs
+            .as_ref()
+            .map_or_else(|| quote! {}, |docs| quote! { #[doc = #docs] })
+    }
+}
+
 impl Parse for PublicItem {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut public_item = Self::default();
@@ -84,6 +93,11 @@ pub struct ItemAttr {
     pub macro_construct: PublicItem,
     pub into_trait: PublicItem,
     pub into_method: PublicItem,
+    pub try_from_owned_method: PublicItem,
+    pub try_from_method: PublicItem,
+    pub extract_owned_method: PublicItem,
+    pub extract_method: PublicItem,
+    pub try_from_error: PublicItem,
 }
 
 impl Parse for ItemAttr {
@@ -131,6 +145,41 @@ impl Parse for ItemAttr {
                     };
                     let public_item: PublicItem = parse2(tokens)?;
                     attr.into_method = public_item;
+                }
+                "try_from_owned_method" => {
+                    let Meta::List(MetaList { tokens, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let public_item: PublicItem = parse2(tokens)?;
+                    attr.try_from_owned_method = public_item;
+                }
+                "try_from_method" => {
+                    let Meta::List(MetaList { tokens, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let public_item: PublicItem = parse2(tokens)?;
+                    attr.try_from_method = public_item;
+                }
+                "extract_owned_method" => {
+                    let Meta::List(MetaList { tokens, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let public_item: PublicItem = parse2(tokens)?;
+                    attr.extract_owned_method = public_item;
+                }
+                "extract_method" => {
+                    let Meta::List(MetaList { tokens, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let public_item: PublicItem = parse2(tokens)?;
+                    attr.extract_method = public_item;
+                }
+                "try_from_error" => {
+                    let Meta::List(MetaList { tokens, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let public_item: PublicItem = parse2(tokens)?;
+                    attr.try_from_error = public_item;
                 }
                 _ => {}
             }

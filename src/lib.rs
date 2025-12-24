@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 use syn::Attribute;
 use syn::Expr;
 use syn::Ident;
+use syn::LitStr;
 use syn::Token;
 use syn::Visibility;
 use syn::braced;
@@ -32,16 +33,12 @@ const INTERNAL_FULL_WILDCARD: &str = "__INTERNAL_FULL_WILDCARD";
 struct SigmaType {
     visibility: Visibility,
     name: Ident,
-    variants: Vec<NiceType<Infallible>>,
+    variants: Vec<(NiceType<Infallible>, Ident)>,
     subattrs: Vec<Attribute>,
     attr: ItemAttr,
 }
 
 impl SigmaType {
-    fn variant_name(&self, variant: &NiceType<Infallible>) -> Ident {
-        variant.variant_name()
-    }
-
     fn macro_match_name(&self) -> Ident {
         self.attr.macro_match.name.as_ref().map_or_else(
             || format_ident!("{}_match", self.name.to_string().to_snake_case()),
@@ -120,11 +117,9 @@ impl ToTokens for SigmaType {
             subattrs,
             attr: _,
         } = &self;
-        let variant_names: Vec<_> = self
-            .variants
-            .iter()
-            .map(|var| self.variant_name(&var))
-            .collect();
+        let variants_btree: BTreeMap<_, _> = variants.iter().cloned().collect();
+        let variant_types: Vec<_> = variants.iter().map(|(var, _)| var).collect();
+        let variant_names: Vec<_> = variants.iter().map(|(_, name)| name).collect();
 
         let macro_match = self.macro_match_name();
         let macro_construct = self.macro_construct_name();
@@ -153,7 +148,7 @@ impl ToTokens for SigmaType {
 
         let mut patterns_map = BTreeMap::new();
         patterns_map.insert(NiceType::PatternIdent(()), Vec::new());
-        for ty in variants {
+        for ty in &variant_types {
             for pat in ty.patterns_matching() {
                 let matches = patterns_map.entry(pat).or_insert(Vec::new());
                 matches.push(ty);
@@ -166,7 +161,7 @@ impl ToTokens for SigmaType {
         let pat_variants: Vec<_> = patterns_map.values().collect();
         let pat_variant_names: Vec<Vec<_>> = pat_variants
             .iter()
-            .map(|v| v.iter().map(|ty| ty.variant_name()).collect())
+            .map(|v| v.iter().map(|ty| variants_btree[ty].clone()).collect())
             .collect();
 
         let patterns_vars: Vec<_> = patterns.iter().map(|pat| pat.index_patterns()).collect();
@@ -250,7 +245,7 @@ impl ToTokens for SigmaType {
         tokens.append_all(quote! {
             #(#subattrs)*
             #visibility enum #name {
-                #(#variant_names(#variants),)*
+                #(#variant_names(#variant_types),)*
             }
         });
 
@@ -440,7 +435,7 @@ impl ToTokens for SigmaType {
                     pub trait Sealed {}
                 }
 
-                #( impl #into_trait_sealed_mod ::Sealed for #variants {} )*
+                #( impl #into_trait_sealed_mod ::Sealed for #variant_types {} )*
             });
         } else {
             tokens.append_all(quote! {
@@ -452,14 +447,14 @@ impl ToTokens for SigmaType {
 
         tokens.append_all(quote! {
             #(
-                impl #into_trait for #variants {
+                impl #into_trait for #variant_types {
                     fn #into_method (self) -> #name {
                         #name :: #variant_names (self)
                     }
                 }
 
-                impl From<#variants> for #name {
-                    fn from(value: #variants) -> Self {
+                impl From<#variant_types> for #name {
+                    fn from(value: #variant_types) -> Self {
                         value. #into_method ()
                     }
                 }
@@ -479,7 +474,7 @@ impl Parse for SigmaType {
         let mut variants = Vec::new();
         while !content.is_empty() {
             let mut expand = BTreeMap::new();
-            // let mut rename = BTreeMap::new();
+            let mut rename = None;
             if let Ok(attrs) = content.call(Attribute::parse_outer) {
                 for attr in attrs {
                     if attr.path().is_ident("sigma_enum") {
@@ -500,6 +495,19 @@ impl Parse for SigmaType {
                                         Ok(())
                                     })?;
                                 }
+                                "rename" => {
+                                    let _: Token![=] = meta.input.parse()?;
+                                    if let Ok(ident) = meta.input.parse::<Ident>() {
+                                        rename = Some(ident.to_string());
+                                    } else if let Ok(template) = meta.input.parse::<LitStr>() {
+                                        rename = Some(template.value());
+                                    } else {
+                                        return Err(syn::Error::new(
+                                            meta.input.span(),
+                                            "invalid renaming template",
+                                        ));
+                                    }
+                                }
                                 _ => {
                                     return Err(syn::Error::new(meta.path.span(), "invalid attr"));
                                 }
@@ -510,12 +518,35 @@ impl Parse for SigmaType {
                 }
             }
 
-            let _var_name: Ident = content.parse()?;
+            // variant name
+            // we cannot have rename and variant name
+
+            let enum_var_name: Ident = content.parse()?;
+            let enum_var_name =
+                (!enum_var_name.to_string().starts_with("_")).then_some(enum_var_name);
+            if rename.is_some() && enum_var_name.is_some() {
+                return Err(syn::Error::new(
+                    content.span(),
+                    "cannot use variant name and rename attribute",
+                ));
+            }
+
             let ty_paren;
             parenthesized!(ty_paren in content);
             let nice_type: NiceType<Infallible> = ty_paren.parse()?;
             assert!(ty_paren.is_empty());
             let _ = content.parse::<Token![,]>();
+
+            if rename.as_deref().is_some_and(|rename| {
+                !expand
+                    .keys()
+                    .all(|ident| rename.contains(&format!("{{{}}}", ident)))
+            }) {
+                return Err(syn::Error::new(
+                    enum_var_name.span(),
+                    "rename template does not have all metavariables",
+                ));
+            }
 
             let cartesian: Vec<Vec<(Ident, NiceTypeLit)>> =
                 expand
@@ -525,7 +556,7 @@ impl Parse for SigmaType {
                             .into_iter()
                             .flat_map(|a| {
                                 range.iter().map({
-                                    let ident = ident.clone(); // why clone it twice
+                                    let ident = &ident;
                                     move |r| {
                                         let mut a = a.clone();
                                         a.push((ident.clone(), r.clone()));
@@ -537,11 +568,22 @@ impl Parse for SigmaType {
                     });
 
             for assignments in cartesian {
-                let mut nice_type = nice_type.clone();
-                for (ident, r) in assignments {
-                    nice_type = nice_type.replace_ident(&ident.to_string(), &r)
+                let mut var_type = nice_type.clone();
+                for (ident, r) in &assignments {
+                    var_type = var_type.replace_ident(&ident.to_string(), &r)
                 }
-                variants.push(nice_type);
+                let name = match &rename {
+                    Some(template) => {
+                        let mut name = template.clone();
+                        for (var, val) in assignments {
+                            name =
+                                name.replace(&format!("{{{}}}", var), &val.variant_name_string());
+                        }
+                        format_ident!("{}", name)
+                    }
+                    None => var_type.variant_name(),
+                };
+                variants.push((var_type, name));
             }
         }
 

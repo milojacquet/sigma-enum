@@ -16,7 +16,7 @@ use syn::spanned::Spanned;
 
 const INTERNAL_PATTERN: &str = "__INTERNAL_PATTERN";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Infallible(std::convert::Infallible);
 
 impl Infallible {
@@ -62,7 +62,7 @@ impl NiceTypeLit {
         }
     }
 
-    fn variant_name_string(&self) -> String {
+    pub fn variant_name_string(&self) -> String {
         match self {
             NiceTypeLit::Int(digits) => digits.replace("-", "Neg"),
             NiceTypeLit::Bool(b) => b.to_string(),

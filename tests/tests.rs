@@ -42,8 +42,8 @@ struct Nu<M>(M);
 enum NuEnum {
     #[sigma_enum(expand(N = 0..=3))]
     __(Nu<Mu<N>>),
-    __(Nu<Mu<5>>),
-    #[sigma_enum(expand(N = [7..9, 11]))]
+    NuMu5(Nu<Mu<5>>),
+    #[sigma_enum(expand(N = [7..9, 11]), rename = "NuMu{N}_Big")]
     __(Nu<Mu<N>>),
 }
 

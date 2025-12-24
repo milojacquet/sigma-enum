@@ -33,6 +33,7 @@ struct SigmaType {
     visibility: Visibility,
     name: Ident,
     variants: Vec<NiceType<Infallible>>,
+    subattrs: Vec<Attribute>,
     attr: ItemAttr,
 }
 
@@ -42,14 +43,66 @@ impl SigmaType {
     }
 
     fn macro_match_name(&self) -> Ident {
-        format_ident!("{}_match", self.name.to_string().to_snake_case())
+        self.attr.macro_match.name.as_ref().map_or_else(
+            || format_ident!("{}_match", self.name.to_string().to_snake_case()),
+            |name| format_ident!("{}", name),
+        )
     }
 
     fn macro_construct_name(&self) -> Ident {
-        format_ident!("{}_construct", self.name.to_string().to_snake_case())
+        self.attr.macro_construct.name.as_ref().map_or_else(
+            || format_ident!("{}_construct", self.name.to_string().to_snake_case()),
+            |name| format_ident!("{}", name),
+        )
     }
 
-    fn macro_internal_name(&self, which: &str) -> Ident {
+    fn into_trait_name(&self) -> Ident {
+        self.attr.into_trait.name.as_ref().map_or_else(
+            || format_ident!("Into{}", self.name),
+            |name| format_ident!("{}", name),
+        )
+    }
+
+    fn into_method_name(&self) -> Ident {
+        self.attr.into_method.name.as_ref().map_or_else(
+            || format_ident!("into_{}", self.name.to_string().to_snake_case()),
+            |name| format_ident!("{}", name),
+        )
+    }
+
+    fn macro_match_docstring(&self) -> proc_macro2::TokenStream {
+        self.attr
+            .macro_match
+            .docs
+            .as_ref()
+            .map_or_else(|| quote! {}, |docs| quote! { #[doc = #docs] })
+    }
+
+    fn macro_construct_docstring(&self) -> proc_macro2::TokenStream {
+        self.attr
+            .macro_construct
+            .docs
+            .as_ref()
+            .map_or_else(|| quote! {}, |docs| quote! { #[doc = #docs] })
+    }
+
+    fn into_trait_docstring(&self) -> proc_macro2::TokenStream {
+        self.attr
+            .into_trait
+            .docs
+            .as_ref()
+            .map_or_else(|| quote! {}, |docs| quote! { #[doc = #docs] })
+    }
+
+    fn into_method_docstring(&self) -> proc_macro2::TokenStream {
+        self.attr
+            .into_method
+            .docs
+            .as_ref()
+            .map_or_else(|| quote! {}, |docs| quote! { #[doc = #docs] })
+    }
+
+    fn internal_name(&self, which: &str) -> Ident {
         format_ident!(
             "{INTERNAL_IDENT}_{}_{}",
             self.name.to_string().to_snake_case(),
@@ -64,18 +117,32 @@ impl ToTokens for SigmaType {
             visibility,
             name,
             variants,
+            subattrs,
             attr: _,
         } = &self;
-        let variant_names = self.variants.iter().map(|var| self.variant_name(&var));
+        let variant_names: Vec<_> = self
+            .variants
+            .iter()
+            .map(|var| self.variant_name(&var))
+            .collect();
 
         let macro_match = self.macro_match_name();
         let macro_construct = self.macro_construct_name();
-        let macro_match_body = self.macro_internal_name("body");
-        let macro_match_process_body = self.macro_internal_name("process_body");
-        let macro_process_type = self.macro_internal_name("process_type");
-        let macro_match_variant = self.macro_internal_name("variant");
-        let macro_match_pattern = self.macro_internal_name("pattern");
-        let macro_construct_inner = self.macro_internal_name("construct_inner");
+        let macro_match_body = self.internal_name("body");
+        let macro_match_process_body = self.internal_name("process_body");
+        let macro_process_type = self.internal_name("process_type");
+        let macro_match_variant = self.internal_name("variant");
+        let macro_match_pattern = self.internal_name("pattern");
+        let macro_construct_inner = self.internal_name("construct_inner");
+
+        let into_trait = self.into_trait_name();
+        let into_trait_sealed_mod = self.internal_name("into_trait_sealed_mod");
+        let into_method = self.into_method_name();
+
+        let macro_match_docstring = self.macro_match_docstring();
+        let macro_construct_docstring = self.macro_construct_docstring();
+        let into_trait_docstring = self.into_trait_docstring();
+        let into_method_docstring = self.into_method_docstring();
 
         let macro_use = match self.visibility {
             Visibility::Public(_) => quote! { #[macro_use] },
@@ -181,6 +248,7 @@ impl ToTokens for SigmaType {
             .unzip();
 
         tokens.append_all(quote! {
+            #(#subattrs)*
             #visibility enum #name {
                 #(#variant_names(#variants),)*
             }
@@ -189,6 +257,7 @@ impl ToTokens for SigmaType {
         tokens.append_all(quote! {
             #macro_use
             #[allow(unused_macros)]
+            #macro_match_docstring
             macro_rules! #macro_match {
                 ( match $( $rest:tt )* ) => {
                     #macro_match_body ! { (), ( $($rest)* ) }
@@ -335,6 +404,7 @@ impl ToTokens for SigmaType {
         tokens.append_all(quote! {
             #macro_use
             #[allow(unused_macros)]
+            #macro_construct_docstring
             macro_rules! #macro_construct {
                 ( $tyn:ident ::< $($tt:tt)* ) => {
                     #macro_process_type !( (@construct, $tyn), ($($tt)*), (<), (<) )
@@ -357,11 +427,50 @@ impl ToTokens for SigmaType {
                 }; )*
             }
         });
+
+        if matches!(visibility, Visibility::Public(_)) {
+            tokens.append_all(quote! {
+                #into_trait_docstring
+                pub trait #into_trait : #into_trait_sealed_mod ::Sealed {
+                    #into_method_docstring
+                    fn #into_method (self) -> #name;
+                }
+
+                mod #into_trait_sealed_mod {
+                    pub trait Sealed {}
+                }
+
+                #( impl #into_trait_sealed_mod ::Sealed for #variants {} )*
+            });
+        } else {
+            tokens.append_all(quote! {
+                #visibility trait #into_trait {
+                    fn #into_method (self) -> #name;
+                }
+            });
+        }
+
+        tokens.append_all(quote! {
+            #(
+                impl #into_trait for #variants {
+                    fn #into_method (self) -> #name {
+                        #name :: #variant_names (self)
+                    }
+                }
+
+                impl From<#variants> for #name {
+                    fn from(value: #variants) -> Self {
+                        value. #into_method ()
+                    }
+                }
+            )*
+        });
     }
 }
 
 impl Parse for SigmaType {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        let subattrs = Attribute::parse_outer(input)?;
         let visibility: Visibility = input.parse()?;
         let _: Token![enum] = input.parse()?;
         let name: Ident = input.parse()?;
@@ -440,6 +549,7 @@ impl Parse for SigmaType {
             visibility,
             name,
             variants,
+            subattrs,
             attr: ItemAttr::default(),
         })
     }

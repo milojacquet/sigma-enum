@@ -33,8 +33,12 @@ struct Mu<const N: usize>([(); N]);
 struct Nu<M>(M);
 
 #[sigma_enum(
-    generic(Mu<usize>)
+    generic(Mu<usize>),
+    macro_match(name = nu_match, docs =
+"A macro to match Nu."
+),
 )]
+#[derive(Debug, Clone, Copy)]
 enum NuEnum {
     #[sigma_enum(expand(N = 0..=3))]
     __(Nu<Mu<N>>),
@@ -105,7 +109,7 @@ fn match_nu_enum() {
     .unwrap();
 
     assert_eq!(
-        nu_enum_match!(match numu2 {
+        nu_match!(match numu2 {
             Nu::<Mu<0>>(_nu) => 9,
             Nu::<Mu<?N>>(_nu) => N,
             _nu => 99,
@@ -113,13 +117,9 @@ fn match_nu_enum() {
         2
     );
 
-    let numu2 = nu_enum_construct!(Nu::<Mu<?n>>({
-        let arr = [(); n];
-        Nu(Mu(arr))
-    }))
-    .unwrap(); // check const in there
+    // check const in there
     assert_eq!(
-        nu_enum_match!(match numu2 {
+        nu_match!(match numu2 {
             Nu::<Mu<?N>>(_nu) => {
                 let _mu_arr = [(); N];
                 N
@@ -128,13 +128,9 @@ fn match_nu_enum() {
         2
     );
 
-    let numu2 = nu_enum_construct!(Nu::<Mu<?n>>({
-        let arr = [(); n];
-        Nu(Mu(arr))
-    }))
-    .unwrap(); // make sure types don't blow up the let
+    // make sure types don't blow up the let
     assert_eq!(
-        nu_enum_match!(match numu2 {
+        nu_match!(match numu2 {
             Nu::<?T>(_nu) => 2,
         }),
         2

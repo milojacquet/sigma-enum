@@ -1,14 +1,18 @@
 use crate::nice_type::NiceTypeLit;
 use std::collections::BTreeMap;
 use syn::Expr;
+use syn::ExprLit;
 use syn::ExprRange;
 use syn::Ident;
+use syn::Lit;
 use syn::Meta;
 use syn::MetaList;
+use syn::MetaNameValue;
 use syn::Token;
 use syn::parse::Parse;
 use syn::parse::ParseStream;
 use syn::parse::Parser;
+use syn::parse2;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 
@@ -38,13 +42,53 @@ impl Parse for GenericSpec {
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct PublicItem {
+    pub name: Option<Ident>,
+    pub docs: Option<String>,
+}
+
+impl Parse for PublicItem {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut public_item = Self::default();
+        let meta: Punctuated<MetaNameValue, Token![,]> = Punctuated::parse_terminated(input)?;
+        for MetaNameValue { path, value, .. } in meta {
+            match path.require_ident()?.to_string().as_str() {
+                "name" => {
+                    let Expr::Path(name) = value else {
+                        return Err(syn::Error::new(value.span(), "not path"));
+                    };
+                    let name = name.path.require_ident()?;
+                    public_item.name = Some(name.clone());
+                }
+                "docs" => {
+                    let Expr::Lit(ExprLit {
+                        lit: Lit::Str(docs),
+                        ..
+                    }) = value
+                    else {
+                        return Err(syn::Error::new(value.span(), "not string"));
+                    };
+                    public_item.docs = Some(docs.value());
+                }
+                _ => {}
+            }
+        }
+        Ok(public_item)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct ItemAttr {
     pub generics: BTreeMap<Ident, Vec<Option<Ident>>>,
+    pub macro_match: PublicItem,
+    pub macro_construct: PublicItem,
+    pub into_trait: PublicItem,
+    pub into_method: PublicItem,
 }
 
 impl Parse for ItemAttr {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        let mut out = Self::default();
+        let mut attr = Self::default();
         let metas: Punctuated<Meta, Token![,]> = Punctuated::parse_terminated(input)?;
         for meta in metas {
             match meta.path().require_ident()?.to_string().as_str() {
@@ -55,15 +99,43 @@ impl Parse for ItemAttr {
                     let generics: Punctuated<GenericSpec, Token![,]> =
                         Parser::parse2(Punctuated::parse_terminated, tokens)?;
                     for GenericSpec(ident, params) in generics {
-                        if out.generics.insert(ident.clone(), params).is_some() {
+                        if attr.generics.insert(ident.clone(), params).is_some() {
                             return Err(syn::Error::new(ident.span(), "duplicate ident"));
                         }
                     }
                 }
+                "macro_match" => {
+                    let Meta::List(MetaList { tokens, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let public_item: PublicItem = parse2(tokens)?;
+                    attr.macro_match = public_item;
+                }
+                "macro_construct" => {
+                    let Meta::List(MetaList { tokens, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let public_item: PublicItem = parse2(tokens)?;
+                    attr.macro_construct = public_item;
+                }
+                "into_trait" => {
+                    let Meta::List(MetaList { tokens, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let public_item: PublicItem = parse2(tokens)?;
+                    attr.into_trait = public_item;
+                }
+                "into_method" => {
+                    let Meta::List(MetaList { tokens, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let public_item: PublicItem = parse2(tokens)?;
+                    attr.into_method = public_item;
+                }
                 _ => {}
             }
         }
-        Ok(out)
+        Ok(attr)
     }
 }
 

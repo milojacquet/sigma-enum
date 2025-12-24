@@ -30,15 +30,22 @@ const INTERNAL_IDENT: &str = "__INTERNAL_IDENT";
 const INTERNAL_FULL_WILDCARD: &str = "__INTERNAL_FULL_WILDCARD";
 
 #[derive(Clone)]
-struct SigmaType {
+struct Variant {
+    ty: NiceType<Infallible>,
+    name: Ident,
+    attrs: Vec<Attribute>,
+}
+
+#[derive(Clone)]
+struct SigmaEnum {
     visibility: Visibility,
     name: Ident,
-    variants: Vec<(NiceType<Infallible>, Ident)>,
+    variants: Vec<Variant>,
     subattrs: Vec<Attribute>,
     attr: ItemAttr,
 }
 
-impl SigmaType {
+impl SigmaEnum {
     fn macro_match_name(&self) -> Ident {
         self.attr.macro_match.name.as_ref().map_or_else(
             || format_ident!("{}_match", self.name.to_string().to_snake_case()),
@@ -108,18 +115,22 @@ impl SigmaType {
     }
 }
 
-impl ToTokens for SigmaType {
+impl ToTokens for SigmaEnum {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let SigmaType {
+        let SigmaEnum {
             visibility,
             name,
             variants,
             subattrs,
             attr: _,
         } = &self;
-        let variants_btree: BTreeMap<_, _> = variants.iter().cloned().collect();
-        let variant_types: Vec<_> = variants.iter().map(|(var, _)| var).collect();
-        let variant_names: Vec<_> = variants.iter().map(|(_, name)| name).collect();
+        let variants_btree: BTreeMap<_, _> = variants
+            .iter()
+            .map(|var| (var.ty.clone(), var.name.clone()))
+            .collect();
+        let variant_types: Vec<_> = variants.iter().map(|var| var.ty.clone()).collect();
+        let variant_names: Vec<_> = variants.iter().map(|var| var.name.clone()).collect();
+        let variant_attrs: Vec<_> = variants.iter().map(|var| var.attrs.clone()).collect();
 
         let macro_match = self.macro_match_name();
         let macro_construct = self.macro_construct_name();
@@ -245,7 +256,10 @@ impl ToTokens for SigmaType {
         tokens.append_all(quote! {
             #(#subattrs)*
             #visibility enum #name {
-                #(#variant_names(#variant_types),)*
+                #(
+                    #(#variant_attrs)*
+                    #variant_names(#variant_types),
+                )*
             }
         });
 
@@ -463,7 +477,7 @@ impl ToTokens for SigmaType {
     }
 }
 
-impl Parse for SigmaType {
+impl Parse for SigmaEnum {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let subattrs = Attribute::parse_outer(input)?;
         let visibility: Visibility = input.parse()?;
@@ -472,11 +486,12 @@ impl Parse for SigmaType {
         let content;
         braced!(content in input);
         let mut variants = Vec::new();
+        let mut attrs = Vec::new();
         while !content.is_empty() {
             let mut expand = BTreeMap::new();
             let mut rename = None;
-            if let Ok(attrs) = content.call(Attribute::parse_outer) {
-                for attr in attrs {
+            if let Ok(attributes) = content.call(Attribute::parse_outer) {
+                for attr in &attributes {
                     if attr.path().is_ident("sigma_enum") {
                         attr.parse_nested_meta(|meta| {
                             match meta.path.require_ident()?.to_string().as_str() {
@@ -514,6 +529,8 @@ impl Parse for SigmaType {
                             }
                             Ok(())
                         })?;
+                    } else {
+                        attrs.push(attr.clone());
                     }
                 }
             }
@@ -583,11 +600,15 @@ impl Parse for SigmaType {
                     }
                     None => var_type.variant_name(),
                 };
-                variants.push((var_type, name));
+                variants.push(Variant {
+                    ty: var_type,
+                    name,
+                    attrs: attrs.clone(),
+                });
             }
         }
 
-        Ok(SigmaType {
+        Ok(SigmaEnum {
             visibility,
             name,
             variants,
@@ -600,7 +621,7 @@ impl Parse for SigmaType {
 #[proc_macro_attribute]
 pub fn sigma_enum(attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
-    let mut sigma_enum = parse_macro_input!(item as SigmaType);
+    let mut sigma_enum = parse_macro_input!(item as SigmaEnum);
     let attr = parse_macro_input!(attr as ItemAttr);
     sigma_enum.attr = attr;
 

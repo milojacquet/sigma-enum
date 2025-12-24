@@ -682,7 +682,10 @@ impl Parse for SigmaEnum {
                         }
                         format_ident!("{}", name)
                     }
-                    None => var_type.variant_name(),
+                    None => match &enum_var_name {
+                        Some(enum_var_name) => enum_var_name.clone(),
+                        None => var_type.variant_name(),
+                    },
                 };
                 variants.push(Variant {
                     ty: var_type,

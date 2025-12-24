@@ -31,20 +31,6 @@ impl ToTokens for Infallible {
     }
 }
 
-fn zip_equal<A, B>(
-    a_iter: impl IntoIterator<Item = A>,
-    b_iter: impl IntoIterator<Item = B>,
-) -> impl Iterator<Item = Result<(A, B), Result<A, B>>> {
-    let mut a_iter = a_iter.into_iter();
-    let mut b_iter = b_iter.into_iter();
-    std::iter::from_fn(move || match (a_iter.next(), b_iter.next()) {
-        (None, None) => None,
-        (None, Some(b)) => Some(Err(Err(b))),
-        (Some(a), None) => Some(Err(Ok(a))),
-        (Some(a), Some(b)) => Some(Ok((a, b))),
-    })
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum NiceTypeLit {
     Int(String),
@@ -147,34 +133,6 @@ impl NiceType<Infallible> {
         }
     }
 
-    fn words(&self) -> BTreeSet<String> {
-        let mut ws = BTreeSet::new();
-        match self {
-            Self::Never => (),
-            Self::Ident(name, tys) => {
-                ws.insert(name.to_string());
-                ws.extend(tys.iter().flat_map(|ty| ty.words()));
-            }
-            Self::Literal(_lit) => (),
-            Self::PatternIdent(x) => x.absurd(),
-        }
-        ws
-    }
-
-    fn matches<P>(&self, pat: &NiceType<P>) -> bool {
-        match (self, pat) {
-            (_, NiceType::PatternIdent(_)) => true,
-            (Self::Never, NiceType::Never) => true,
-            (Self::Ident(name, tys), NiceType::Ident(pat_name, pat_tys)) => {
-                name == pat_name
-                    && zip_equal(tys, pat_tys)
-                        .all(|typ| typ.is_ok_and(|(ty, pat_ty)| ty.matches(pat_ty)))
-            }
-            (Self::Literal(lit), NiceType::Literal(pat_lit)) => lit == pat_lit,
-            _ => false,
-        }
-    }
-
     pub fn matches_map<P: Ord + Clone>(
         &self,
         pat: &NiceType<P>,
@@ -221,28 +179,6 @@ impl NiceType<Infallible> {
                 }
             }
             Self::Literal(lit) => Self::Literal(lit.clone()),
-            Self::PatternIdent(x) => x.absurd(),
-        }
-    }
-
-    fn with_pattern(self: &Box<Self>) -> Box<NiceType<()>> {
-        Box::new(self.map_pattern(|_| ()))
-    }
-
-    fn to_pattern(&self, words: &BTreeSet<String>) -> NiceType<()> {
-        match self {
-            Self::Never => NiceType::Never,
-            Self::Ident(name, tys) => {
-                if words.contains(name) && tys.is_empty() {
-                    NiceType::PatternIdent(())
-                } else {
-                    NiceType::Ident(
-                        name.to_string(),
-                        tys.iter().map(|ty| ty.to_pattern(words)).collect(),
-                    )
-                }
-            }
-            Self::Literal(lit) => NiceType::Literal(lit.clone()),
             Self::PatternIdent(x) => x.absurd(),
         }
     }

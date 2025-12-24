@@ -39,6 +39,7 @@ struct Nu<M>(M);
 ),
 )]
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 enum NuEnum {
     #[sigma_enum(expand(N = 0..=3))]
     __(Nu<Mu<N>>),

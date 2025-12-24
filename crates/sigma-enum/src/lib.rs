@@ -372,16 +372,5 @@ mod tests {
             }),
             2
         );
-
-        // check const in there. compile fail
-        // assert_eq!(
-        //     nu_enum_match!(match (NuEnum::Nu_Mu_2(Nu(Mu([(), ()])))) {
-        //         Nu::<Mu<?N>>(_nu) => {
-        //             let _mu_arr = [(); N];
-        //             N
-        //         }
-        //     }),
-        //     2
-        // );
     }
 }

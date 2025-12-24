@@ -1,0 +1,7 @@
+error: invalid metavariable in rename template
+ --> tests/compile-fail/invalid-rename-template-metavar.rs:5:1
+  |
+5 | #[sigma_enum]
+  | ^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `sigma_enum` (in Nightly builds, run with -Z macro-backtrace for more info)

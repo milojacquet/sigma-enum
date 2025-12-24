@@ -10,6 +10,7 @@ use quote::TokenStreamExt;
 use quote::format_ident;
 use quote::quote;
 use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use syn::Attribute;
 use syn::Expr;
 use syn::Ident;
@@ -570,6 +571,7 @@ impl Parse for SigmaEnum {
         let content;
         braced!(content in input);
         let mut variants = Vec::new();
+        let mut variant_tys = BTreeSet::new();
         let mut attrs = Vec::new();
         while !content.is_empty() {
             let mut expand = BTreeMap::new();
@@ -586,8 +588,8 @@ impl Parse for SigmaEnum {
                                         let value = extract_expansion(&value)?;
                                         if expand.contains_key(ident) {
                                             return Err(syn::Error::new(
-                                                ident.span(),
-                                                "duplicate expansion",
+                                                meta.path.span(),
+                                                "duplicate expand attribute",
                                             ));
                                         }
                                         expand.insert(ident.clone(), value);
@@ -595,6 +597,12 @@ impl Parse for SigmaEnum {
                                     })?;
                                 }
                                 "rename" => {
+                                    if rename.is_some() {
+                                        return Err(syn::Error::new(
+                                            meta.path.span(),
+                                            "duplicate rename attribute",
+                                        ));
+                                    }
                                     let _: Token![=] = meta.input.parse()?;
                                     if let Ok(ident) = meta.input.parse::<Ident>() {
                                         rename = Some(ident.to_string());
@@ -627,8 +635,14 @@ impl Parse for SigmaEnum {
                 (!enum_var_name.to_string().starts_with("_")).then_some(enum_var_name);
             if rename.is_some() && enum_var_name.is_some() {
                 return Err(syn::Error::new(
-                    content.span(),
+                    enum_var_name.span(),
                     "cannot use variant name and rename attribute",
+                ));
+            }
+            if !expand.is_empty() && enum_var_name.is_some() {
+                return Err(syn::Error::new(
+                    enum_var_name.span(),
+                    "cannot use variant name and expand attribute",
                 ));
             }
 
@@ -680,6 +694,12 @@ impl Parse for SigmaEnum {
                             name =
                                 name.replace(&format!("{{{}}}", var), &val.variant_name_string());
                         }
+                        if name.contains('{') {
+                            return Err(syn::Error::new(
+                                template.span(),
+                                "invalid metavariable in rename template",
+                            ));
+                        }
                         format_ident!("{}", name)
                     }
                     None => match &enum_var_name {
@@ -687,6 +707,9 @@ impl Parse for SigmaEnum {
                         None => var_type.variant_name(),
                     },
                 };
+                if !variant_tys.insert(var_type.clone()) {
+                    return Err(syn::Error::new(var_type.span(), "duplicate variant types"));
+                }
                 variants.push(Variant {
                     ty: var_type,
                     name,

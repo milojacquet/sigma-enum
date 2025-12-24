@@ -10,3 +10,6 @@ keywords = ["derive", "dependent-types"]
 
 [dependencies]
 sigma-enum-macros = { version = "0.1.0", path = "../sigma-enum-macros" }
+
+[dev-dependencies]
+trybuild = "1.0"

@@ -1,0 +1,5 @@
+error: cannot use variant name and rename attribute
+ --> tests/compile-fail/rename-and-variant-name.rs:8:5
+  |
+8 |     Mu5(Mu<N>),
+  |     ^^^

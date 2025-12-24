@@ -1,0 +1,5 @@
+error: duplicate expand attribute
+ --> tests/compile-fail/duplicate-expand.rs:7:43
+  |
+7 |     #[sigma_enum(expand(N = 0..5), expand(N = 6..9))]
+  |                                           ^

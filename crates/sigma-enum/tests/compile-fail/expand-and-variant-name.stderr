@@ -1,0 +1,5 @@
+error: cannot use variant name and expand attribute
+ --> tests/compile-fail/expand-and-variant-name.rs:8:5
+  |
+8 |     Mu5(Mu<N>),
+  |     ^^^

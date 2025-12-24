@@ -319,7 +319,7 @@ impl ToTokens for SigmaEnum {
                         #[allow(unused_labels)]
                         'ma: {
                             $( #macro_match_variant !{$ty; what; 'ma; $binding => $body} )*
-                            unreachable!();
+                            ::std::unreachable!();
                         }
                     }
                 };
@@ -372,10 +372,10 @@ impl ToTokens for SigmaEnum {
                     #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* > >), ($($counter)*) )
                 };
                 ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), () ) => {
-                    compile_error!("imbalanced")
+                    ::std::compile_error!("imbalanced")
                 };
                 ( $bundle:tt, (>> $($rest:tt)*), ( $($params:tt)* ), () ) => {
-                    compile_error!("imbalanced")
+                    ::std::compile_error!("imbalanced")
                 };
                 ( $bundle:tt, (< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
                     #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* <), (< $($counter)*) )
@@ -393,7 +393,7 @@ impl ToTokens for SigmaEnum {
                     #macro_construct_inner !( ($tyn :: $($params)+); ( $expr ) )
                 };
                 ( $bundle:tt, (( $($any:tt)* ) $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    compile_error!("imbalanced or something")
+                    ::std::compile_error!("imbalanced or something")
                 };
                 ( $bundle:tt, ($thing:tt $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
                     #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* $thing), ( $($counter)*) )
@@ -443,9 +443,9 @@ impl ToTokens for SigmaEnum {
                     'ma: {
                         #( if true #(&& #pat_vars_params_eqs)* {
                             #const_let_statements
-                            break 'ma Some(#name :: #pat_variant_names($body));
+                            break 'ma ::std::option::Option::Some(#name :: #pat_variant_names($body));
                         } )*
-                        None
+                        ::std::option::Option::None
                     }
                 }; )*
             }
@@ -494,31 +494,31 @@ impl ToTokens for SigmaEnum {
                         where Self: ::core::marker::Sized
                     {
                         if let #name :: #variant_names (out) = value {
-                            Some(out)
+                            ::std::option::Option::Some(out)
                         } else {
-                            None
+                            ::std::option::Option::None
                         }
                     }
 
                     fn #try_from_method <'a>(value: &'a #name) -> Option<&'a Self> {
                         if let #name :: #variant_names (out) = value {
-                            Some(out)
+                            ::std::option::Option::Some(out)
                         } else {
-                            None
+                            ::std::option::Option::None
                         }
                     }
                 }
 
                 impl ::std::convert::From<#variant_types> for #name {
                     fn from(value: #variant_types) -> Self {
-                        value. #into_method ()
+                        #into_trait :: #into_method (value)
                     }
                 }
 
                 impl<'a> ::std::convert::TryFrom<&'a #name> for &'a #variant_types {
                     type Error = #try_from_error;
                     fn try_from(value: &'a #name) -> Result<&'a #variant_types, #try_from_error > {
-                       < #variant_types >:: #try_from_method (value).ok_or( #try_from_error )
+                       < #variant_types as #into_trait >:: #try_from_method (value).ok_or( #try_from_error )
                     }
                 }
 
@@ -527,7 +527,7 @@ impl ToTokens for SigmaEnum {
                 {
                     type Error = #try_from_error;
                     fn try_from(value: #name) -> Result<#variant_types, #try_from_error > {
-                       < #variant_types >:: #try_from_owned_method (value).ok_or( #try_from_error )
+                       < #variant_types as #into_trait >:: #try_from_owned_method (value).ok_or( #try_from_error )
                     }
                 }
             )*
@@ -543,20 +543,66 @@ impl ToTokens for SigmaEnum {
                     T:: #try_from_method (self)
                 }
             }
+        });
 
-            #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        tokens.append_all(quote! {
             pub struct #try_from_error;
 
-            impl ::std::fmt::Display for #try_from_error {
-                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                    ::std::fmt::Formatter::write_str(f, "attempted to extract value from a ")?;
-                    ::std::fmt::Formatter::write_str(f, stringify!( #name ))?;
-                    ::std::fmt::Formatter::write_str(f, " holding a different type")?;
-                    Ok(())
+            #[automatically_derived]
+            impl ::core::fmt::Debug for #try_from_error {
+                #[inline]
+                fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                    ::core::fmt::Formatter::write_str(f, ::std::stringify!(#try_from_error))
+                }
+            }
+            #[automatically_derived]
+            impl ::core::clone::Clone for #try_from_error {
+                #[inline]
+                fn clone(&self) -> #try_from_error {
+                    *self
+                }
+            }
+            #[automatically_derived]
+            impl ::core::marker::Copy for #try_from_error {}
+            #[automatically_derived]
+            impl ::core::cmp::PartialEq for #try_from_error {
+                #[inline]
+                fn eq(&self, other: & #try_from_error) -> bool {
+                    true
+                }
+            }
+            #[automatically_derived]
+            impl ::core::cmp::Eq for #try_from_error {}
+            #[automatically_derived]
+            impl ::core::hash::Hash for #try_from_error {
+                #[inline]
+                fn hash<__H: ::core::hash::Hasher>(&self, state: &mut __H) -> () {}
+            }
+            #[automatically_derived]
+            impl ::core::cmp::PartialOrd for #try_from_error {
+                #[inline]
+                fn partial_cmp(&self, other: & #try_from_error) -> ::core::option::Option<::core::cmp::Ordering> {
+                    ::core::option::Option::Some(::core::cmp::Ordering::Equal)
+                }
+            }
+            #[automatically_derived]
+            impl ::core::cmp::Ord for #try_from_error {
+                #[inline]
+                fn cmp(&self, other: & #try_from_error) -> ::core::cmp::Ordering {
+                    ::core::cmp::Ordering::Equal
                 }
             }
 
-            #try_from_error_docstring
+            impl ::std::fmt::Display for #try_from_error {
+                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                    f.write_str("attempted to extract value from a ")?;
+                    f.write_str(::std::stringify!( #name ))?;
+                    f.write_str(" holding a different type")?;
+                    ::std::fmt::Result::Ok(())
+                }
+            }
+
+           #try_from_error_docstring
             impl ::std::error::Error for #try_from_error {}
         });
     }

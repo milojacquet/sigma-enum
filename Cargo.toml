@@ -2,6 +2,11 @@
 name = "sigma-enum"
 version = "0.1.0"
 edition = "2024"
+license = "MIT/Apache-2.0"
+description = "A macro to simulate sigma types with enums."
+readme = "README.md"
+categories = ["data-structures", "rust-patterns"]
+keywords = ["derive", "dependent-types"]
 
 [lib]
 proc-macro = true

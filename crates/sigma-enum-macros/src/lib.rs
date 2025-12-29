@@ -340,7 +340,7 @@ impl ToTokens for SigmaEnum {
                                 Some(generic_ty) => quote! { const $ #ident : #generic_ty = #lit; },
                                 None => quote! { let $ #ident = #lit; },
                             })
-                            .map(|q| quote! { #[allow(nonstandard_style)] #q })
+                            .map(|q| quote! { #[allow(nonstandard_style)] #[allow(unused_variables)] #q })
                             .collect()
                     })
                     .collect()

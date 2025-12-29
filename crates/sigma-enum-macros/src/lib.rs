@@ -16,6 +16,7 @@ use syn::Expr;
 use syn::Ident;
 use syn::LitStr;
 use syn::Token;
+use syn::VisRestricted;
 use syn::Visibility;
 use syn::braced;
 use syn::parenthesized;
@@ -154,14 +155,17 @@ impl ToTokens for SigmaEnum {
         let variant_names: Vec<_> = variants.iter().map(|var| var.name.clone()).collect();
         let variant_attrs: Vec<_> = variants.iter().map(|var| var.attrs.clone()).collect();
 
-        let macro_match = self.macro_match_name();
-        let macro_construct = self.macro_construct_name();
+        let macro_match = self.internal_name("match");
+        let macro_construct = self.internal_name("construct");
         let macro_match_body = self.internal_name("body");
         let macro_match_process_body = self.internal_name("process_body");
         let macro_process_type = self.internal_name("process_type");
         let macro_match_variant = self.internal_name("variant");
         let macro_match_pattern = self.internal_name("pattern");
         let macro_construct_inner = self.internal_name("construct_inner");
+
+        let macro_match_public = self.macro_match_name();
+        let macro_construct_public = self.macro_construct_name();
 
         let into_trait = self.into_trait_name();
         let into_trait_sealed_mod = self.internal_name("into_trait_sealed_mod");
@@ -186,10 +190,92 @@ impl ToTokens for SigmaEnum {
         let extract_mut_method_docstring = self.attr.extract_mut_method.docstring();
         let try_from_error_docstring = self.attr.try_from_error.docstring();
 
-        let macro_export = match self.visibility {
-            Visibility::Public(_) => quote! { #[macro_export] },
-            _ => quote! {},
-        };
+        let macro_match_export;
+        let macro_construct_export;
+        let macro_match_body_export;
+        let macro_match_process_body_export;
+        let macro_process_type_export;
+        let macro_match_variant_export;
+        let macro_match_pattern_export;
+        let macro_construct_inner_export;
+        let macro_match_pub_use;
+        let macro_construct_pub_use;
+        let macro_match_body_pub_use;
+        let macro_match_process_body_pub_use;
+        let macro_process_type_pub_use;
+        let macro_match_variant_pub_use;
+        let macro_match_pattern_pub_use;
+        let macro_construct_inner_pub_use;
+        match &self.visibility {
+            Visibility::Public(_) => {
+                macro_match_export = quote! { #[macro_export] };
+                macro_construct_export = quote! { #[macro_export] };
+                macro_match_body_export = quote! { #[macro_export] };
+                macro_match_process_body_export = quote! { #[macro_export] };
+                macro_process_type_export = quote! { #[macro_export] };
+                macro_match_variant_export = quote! { #[macro_export] };
+                macro_match_pattern_export = quote! { #[macro_export] };
+                macro_construct_inner_export = quote! { #[macro_export] };
+                macro_match_pub_use =
+                    quote! { #macro_match_docstring pub use #macro_match as #macro_match_public; };
+                macro_construct_pub_use = quote! { #macro_construct_docstring pub use #macro_construct as #macro_construct_public; };
+                macro_match_body_pub_use = quote! { #[doc(hidden)] pub use #macro_match_body; };
+                macro_match_process_body_pub_use =
+                    quote! { #[doc(hidden)] pub use #macro_match_process_body; };
+                macro_process_type_pub_use = quote! { #[doc(hidden)] pub use #macro_process_type; };
+                macro_match_variant_pub_use =
+                    quote! { #[doc(hidden)] pub use #macro_match_variant; };
+                macro_match_pattern_pub_use =
+                    quote! { #[doc(hidden)] pub use #macro_match_pattern; };
+                macro_construct_inner_pub_use =
+                    quote! { #[doc(hidden)] pub use #macro_construct_inner; };
+            }
+            Visibility::Restricted(VisRestricted { path, .. }) => {
+                macro_match_export = quote! {};
+                macro_construct_export = quote! {};
+                macro_match_body_export = quote! {};
+                macro_match_process_body_export = quote! {};
+                macro_process_type_export = quote! {};
+                macro_match_variant_export = quote! {};
+                macro_match_pattern_export = quote! {};
+                macro_construct_inner_export = quote! {};
+                macro_match_pub_use = quote! { #macro_match_docstring pub(#path) use #macro_match as #macro_match_public; };
+                macro_construct_pub_use = quote! { #macro_construct_docstring pub(#path) use #macro_construct as #macro_construct_public; };
+                macro_match_body_pub_use =
+                    quote! { #[doc(hidden)] pub(#path) use #macro_match_body; };
+                macro_match_process_body_pub_use =
+                    quote! { #[doc(hidden)] pub(#path) use #macro_match_process_body; };
+                macro_process_type_pub_use =
+                    quote! { #[doc(hidden)] pub(#path) use #macro_process_type; };
+                macro_match_variant_pub_use =
+                    quote! { #[doc(hidden)] pub(#path) use #macro_match_variant; };
+                macro_match_pattern_pub_use =
+                    quote! { #[doc(hidden)] pub(#path) use #macro_match_pattern; };
+                macro_construct_inner_pub_use =
+                    quote! { #[doc(hidden)] pub(#path) use #macro_construct_inner; };
+            }
+            Visibility::Inherited => {
+                macro_match_export = quote! {};
+                macro_construct_export = quote! {};
+                macro_match_body_export = quote! {};
+                macro_match_process_body_export = quote! {};
+                macro_process_type_export = quote! {};
+                macro_match_variant_export = quote! {};
+                macro_match_pattern_export = quote! {};
+                macro_construct_inner_export = quote! {};
+                macro_match_pub_use =
+                    quote! { #macro_match_docstring use #macro_match as #macro_match_public; };
+                macro_construct_pub_use = quote! { #macro_construct_docstring use #macro_construct as #macro_construct_public; };
+                macro_match_body_pub_use = quote! { #[doc(hidden)] use #macro_match_body; };
+                macro_match_process_body_pub_use =
+                    quote! { #[doc(hidden)] use #macro_match_process_body; };
+                macro_process_type_pub_use = quote! { #[doc(hidden)] use #macro_process_type; };
+                macro_match_variant_pub_use = quote! { #[doc(hidden)] use #macro_match_variant; };
+                macro_match_pattern_pub_use = quote! { #[doc(hidden)] use #macro_match_pattern; };
+                macro_construct_inner_pub_use =
+                    quote! { #[doc(hidden)] use #macro_construct_inner; };
+            }
+        }
 
         let internal_full_wildcard = format_ident!("{INTERNAL_FULL_WILDCARD}");
 
@@ -300,7 +386,7 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
-            #macro_export
+            #macro_match_export
             #[allow(unused_macros)]
             #macro_match_docstring
             macro_rules! #macro_match {
@@ -308,10 +394,11 @@ impl ToTokens for SigmaEnum {
                     #macro_match_body ! { (), ( $($rest)* ) }
                 };
             }
+            #macro_match_pub_use
         });
 
         tokens.append_all(quote! {
-            #macro_export
+            #macro_match_body_export
             #[doc(hidden)]
             macro_rules! #macro_match_body {
                 ( $what:tt, ({
@@ -323,10 +410,11 @@ impl ToTokens for SigmaEnum {
                     #macro_match_body ! { ( $($what)* $next ), ( $($rest)* ) }
                 };
             }
+            #macro_match_body_pub_use
         });
 
         tokens.append_all(quote! {
-            #macro_export
+            #macro_match_process_body_export
             #[doc(hidden)]
             macro_rules! #macro_match_process_body {
                 ( $what:tt, (), ( $( ( $ty:tt; $binding:pat => $body:expr ) )* ) ) => {
@@ -381,10 +469,11 @@ impl ToTokens for SigmaEnum {
                     #macro_process_type !( (@match, $what, $tyn, ($( $matched )*)), ($( $rest )*), (<), (<) )
                 };
             }
+            #macro_match_process_body_pub_use
         });
 
         tokens.append_all(quote! {
-            #macro_export
+            #macro_process_type_export
             #[doc(hidden)]
             macro_rules! #macro_process_type {
                 ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), (< $($counter:tt)*) ) => {
@@ -421,10 +510,11 @@ impl ToTokens for SigmaEnum {
                     #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* $thing), ( $($counter)*) )
                 };
             }
+            #macro_process_type_pub_use
         });
 
         tokens.append_all(quote! {
-            #macro_export
+            #macro_match_variant_export
             #[doc(hidden)]
             macro_rules! #macro_match_variant {
                 #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
@@ -434,20 +524,22 @@ impl ToTokens for SigmaEnum {
                     } )*
                 }; )*
             }
+            #macro_match_variant_pub_use
         });
 
         tokens.append_all(quote! {
-            #macro_export
+            #macro_match_pattern_export
             #[doc(hidden)]
             macro_rules! #macro_match_pattern {
                 #( ( ( #pat_vars_names #(::< #( #pat_vars_params ),* >)* ) ) => {
                     #( #name :: #pat_variant_names (_) )|*
                 }; )*
             }
+            #macro_match_pattern_pub_use
         });
 
         tokens.append_all(quote! {
-            #macro_export
+            #macro_construct_export
             #[allow(unused_macros)]
             #macro_construct_docstring
             macro_rules! #macro_construct {
@@ -455,10 +547,11 @@ impl ToTokens for SigmaEnum {
                     #macro_process_type !( (@construct, $tyn), ($($tt)*), (<), (<) )
                 };
             }
+            #macro_construct_pub_use
         });
 
         tokens.append_all(quote! {
-            #macro_export
+            #macro_construct_inner_export
             #[doc(hidden)]
             macro_rules! #macro_construct_inner {
                 #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $body:expr ) => {
@@ -471,6 +564,7 @@ impl ToTokens for SigmaEnum {
                     }
                 }; )*
             }
+            #macro_construct_inner_pub_use
         });
 
         let methods = quote! {

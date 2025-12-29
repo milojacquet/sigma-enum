@@ -247,8 +247,8 @@ pub use sigma_enum_macros::sigma_enum;
 mod tests {
     use super::sigma_enum;
 
-    struct A;
-    struct B;
+    pub struct A;
+    pub struct B;
 
     #[sigma_enum]
     pub enum AbEnum {

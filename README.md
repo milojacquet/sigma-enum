@@ -199,9 +199,11 @@ enum and all types it contains as variants.
 Marking the enum `pub` will export the generated macros and traits as
 part of the public API.
 
-For public enums, you must use the `path` attribute to `sigma_enum` with the
-absolute path to the current module. This is a limitation of Rust's module
-system.
+For public enums, you may not use the generated macros in the same crate
+they were defined in. This is a limitation of Rust's macro system
+(cf. [#52234](https://github.com/rust-lang/rust/pull/52234)).
+For `pub(crate)` enums, you must add the `path` attribute that contains the
+absolute path to the module.
 
 ```rust
 mod inner {

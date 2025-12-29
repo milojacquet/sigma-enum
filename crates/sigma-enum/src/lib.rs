@@ -214,8 +214,10 @@
 //! | Enum trait construction method     | `into_method`           |
 //! | Enum trait extraction method       | `try_from_method`       |
 //! | Enum trait owned extraction method | `try_from_owned_method` |
+//! | Enum trait mut extraction method   | `try_from_mut_method`   |
 //! | Enum extraction method             | `extract_method`        |
 //! | Enum owned extraction method       | `extract_owned_method`  |
+//! | Enum mut extraction method         | `extract_mut_method`    |
 //! | `TryFrom` error                    | `try_from_error`        |
 //!
 //! ```rust

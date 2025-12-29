@@ -97,10 +97,12 @@ pub struct ItemAttr {
     pub macro_construct: PublicItem,
     pub into_trait: PublicItem,
     pub into_method: PublicItem,
-    pub try_from_owned_method: PublicItem,
     pub try_from_method: PublicItem,
-    pub extract_owned_method: PublicItem,
+    pub try_from_owned_method: PublicItem,
+    pub try_from_mut_method: PublicItem,
     pub extract_method: PublicItem,
+    pub extract_owned_method: PublicItem,
+    pub extract_mut_method: PublicItem,
     pub try_from_error: PublicItem,
 }
 
@@ -163,25 +165,35 @@ impl Parse for ItemAttr {
                     let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.into_method = public_item;
                 }
+                "try_from_method" => {
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
+                    attr.try_from_method = public_item;
+                }
                 "try_from_owned_method" => {
                     let MetaList { tokens, .. } = meta.require_list()?;
                     let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.try_from_owned_method = public_item;
                 }
-                "try_from_method" => {
+                "try_from_mut_method" => {
                     let MetaList { tokens, .. } = meta.require_list()?;
                     let public_item: PublicItem = parse2(tokens.clone())?;
-                    attr.try_from_method = public_item;
+                    attr.try_from_mut_method = public_item;
+                }
+                "extract_method" => {
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
+                    attr.extract_method = public_item;
                 }
                 "extract_owned_method" => {
                     let MetaList { tokens, .. } = meta.require_list()?;
                     let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.extract_owned_method = public_item;
                 }
-                "extract_method" => {
+                "extract_mut_method" => {
                     let MetaList { tokens, .. } = meta.require_list()?;
                     let public_item: PublicItem = parse2(tokens.clone())?;
-                    attr.extract_method = public_item;
+                    attr.extract_mut_method = public_item;
                 }
                 "try_from_error" => {
                     let MetaList { tokens, .. } = meta.require_list()?;

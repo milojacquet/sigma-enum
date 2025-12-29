@@ -75,6 +75,13 @@ impl SigmaEnum {
         )
     }
 
+    fn try_from_method_name(&self) -> Ident {
+        self.attr.try_from_method.name.as_ref().map_or_else(
+            || format_ident!("try_from_{}", self.name.to_string().to_snake_case()),
+            |name| format_ident!("{}", name),
+        )
+    }
+
     fn try_from_owned_method_name(&self) -> Ident {
         self.attr.try_from_owned_method.name.as_ref().map_or_else(
             || format_ident!("try_from_owned_{}", self.name.to_string().to_snake_case()),
@@ -82,9 +89,16 @@ impl SigmaEnum {
         )
     }
 
-    fn try_from_method_name(&self) -> Ident {
-        self.attr.try_from_method.name.as_ref().map_or_else(
-            || format_ident!("try_from_{}", self.name.to_string().to_snake_case()),
+    fn try_from_mut_method_name(&self) -> Ident {
+        self.attr.try_from_mut_method.name.as_ref().map_or_else(
+            || format_ident!("try_from_mut_{}", self.name.to_string().to_snake_case()),
+            |name| format_ident!("{}", name),
+        )
+    }
+
+    fn extract_method_name(&self) -> Ident {
+        self.attr.extract_method.name.as_ref().map_or_else(
+            || format_ident!("extract"),
             |name| format_ident!("{}", name),
         )
     }
@@ -96,9 +110,9 @@ impl SigmaEnum {
         )
     }
 
-    fn extract_method_name(&self) -> Ident {
-        self.attr.extract_method.name.as_ref().map_or_else(
-            || format_ident!("extract"),
+    fn extract_mut_method_name(&self) -> Ident {
+        self.attr.extract_mut_method.name.as_ref().map_or_else(
+            || format_ident!("extract_mut"),
             |name| format_ident!("{}", name),
         )
     }
@@ -152,20 +166,24 @@ impl ToTokens for SigmaEnum {
         let into_trait = self.into_trait_name();
         let into_trait_sealed_mod = self.internal_name("into_trait_sealed_mod");
         let into_method = self.into_method_name();
-        let try_from_owned_method = self.try_from_owned_method_name();
         let try_from_method = self.try_from_method_name();
-        let extract_owned_method = self.extract_owned_method_name();
+        let try_from_owned_method = self.try_from_owned_method_name();
+        let try_from_mut_method = self.try_from_mut_method_name();
         let extract_method = self.extract_method_name();
+        let extract_owned_method = self.extract_owned_method_name();
+        let extract_mut_method = self.extract_mut_method_name();
         let try_from_error = self.try_from_error_name();
 
         let macro_match_docstring = self.attr.macro_match.docstring();
         let macro_construct_docstring = self.attr.macro_construct.docstring();
         let into_trait_docstring = self.attr.into_trait.docstring();
         let into_method_docstring = self.attr.into_method.docstring();
-        let try_from_owned_method_docstring = self.attr.try_from_owned_method.docstring();
         let try_from_method_docstring = self.attr.try_from_method.docstring();
-        let extract_owned_method_docstring = self.attr.extract_owned_method.docstring();
+        let try_from_owned_method_docstring = self.attr.try_from_owned_method.docstring();
+        let try_from_mut_method_docstring = self.attr.try_from_mut_method.docstring();
         let extract_method_docstring = self.attr.extract_method.docstring();
+        let extract_owned_method_docstring = self.attr.extract_owned_method.docstring();
+        let extract_mut_method_docstring = self.attr.extract_mut_method.docstring();
         let try_from_error_docstring = self.attr.try_from_error.docstring();
 
         let macro_export = match self.visibility {
@@ -458,11 +476,13 @@ impl ToTokens for SigmaEnum {
         let methods = quote! {
             #into_method_docstring
             fn #into_method (self) -> #name;
+            #try_from_method_docstring
+            fn #try_from_method (value: & #name) -> Option<&Self>;
             #try_from_owned_method_docstring
             fn #try_from_owned_method (value: #name) -> Option<Self>
                 where Self: ::core::marker::Sized;
-            #try_from_method_docstring
-            fn #try_from_method (value: & #name) -> Option<&Self>;
+            #try_from_mut_method_docstring
+            fn #try_from_mut_method (value: &mut #name) -> Option<&mut Self>;
         };
 
         if matches!(visibility, Visibility::Public(_)) {
@@ -498,6 +518,14 @@ impl ToTokens for SigmaEnum {
                         #name :: #variant_names (self)
                     }
 
+                    fn #try_from_method <'a>(value: &'a #name) -> Option<&'a Self> {
+                        if let #name :: #variant_names (out) = value {
+                            ::std::option::Option::Some(out)
+                        } else {
+                            ::std::option::Option::None
+                        }
+                    }
+
                     fn #try_from_owned_method (value: #name) -> Option<Self>
                         where Self: ::core::marker::Sized
                     {
@@ -508,7 +536,7 @@ impl ToTokens for SigmaEnum {
                         }
                     }
 
-                    fn #try_from_method <'a>(value: &'a #name) -> Option<&'a Self> {
+                    fn #try_from_mut_method <'a>(value: &'a mut #name) -> Option<&'a mut Self> {
                         if let #name :: #variant_names (out) = value {
                             ::std::option::Option::Some(out)
                         } else {
@@ -545,14 +573,19 @@ impl ToTokens for SigmaEnum {
 
             #[automatically_derived]
             impl #name {
+                #extract_method_docstring
+                #visibility fn #extract_method <T: #into_trait >(&self) -> Option<&T> {
+                    T:: #try_from_method (self)
+                }
+
                 #extract_owned_method_docstring
                 #visibility fn #extract_owned_method <T: #into_trait >(self) -> Option<T> {
                     T:: #try_from_owned_method (self)
                 }
 
-                #extract_method_docstring
-                #visibility fn #extract_method <T: #into_trait >(&self) -> Option<&T> {
-                    T:: #try_from_method (self)
+                #extract_mut_method_docstring
+                #visibility fn #extract_mut_method <T: #into_trait >(&mut self) -> Option<&mut T> {
+                    T:: #try_from_mut_method (self)
                 }
             }
         });

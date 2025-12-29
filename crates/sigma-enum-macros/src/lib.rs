@@ -482,16 +482,16 @@ impl ToTokens for SigmaEnum {
             #macro_process_type_export
             #[doc(hidden)]
             macro_rules! #macro_process_type {
-                ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), (< $($counter:tt)*) ) => {
+                ( $bundle:tt, ($(,)? > $($rest:tt)*), ( $($params:tt)* ), (< $($counter:tt)*) ) => {
                     #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* >), ($($counter)*) )
                 };
-                ( $bundle:tt, (>> $($rest:tt)*), ( $($params:tt)* ), (< < $($counter:tt)*) ) => {
+                ( $bundle:tt, ($(,)? >> $($rest:tt)*), ( $($params:tt)* ), (< < $($counter:tt)*) ) => {
                     #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* > >), ($($counter)*) )
                 };
-                ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), () ) => {
+                ( $bundle:tt, ($(,)? > $($rest:tt)*), ( $($params:tt)* ), () ) => {
                     ::std::compile_error!("imbalanced")
                 };
-                ( $bundle:tt, (>> $($rest:tt)*), ( $($params:tt)* ), () ) => {
+                ( $bundle:tt, ($(,)? >> $($rest:tt)*), ( $($params:tt)* ), () ) => {
                     ::std::compile_error!("imbalanced")
                 };
                 ( $bundle:tt, (< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {

@@ -468,10 +468,12 @@ impl ToTokens for SigmaEnum {
         if matches!(visibility, Visibility::Public(_)) {
             tokens.append_all(quote! {
                 #into_trait_docstring
+                #[automatically_derived]
                 pub trait #into_trait : #into_trait_sealed_mod ::Sealed {
                     #methods
                 }
 
+                #[automatically_derived]
                 mod #into_trait_sealed_mod {
                     pub trait Sealed {}
                 }
@@ -480,6 +482,7 @@ impl ToTokens for SigmaEnum {
             });
         } else {
             tokens.append_all(quote! {
+                #[automatically_derived]
                 #visibility trait #into_trait {
                     #methods
                 }
@@ -489,6 +492,7 @@ impl ToTokens for SigmaEnum {
         tokens.append_all(quote! {
             #(
                 #into_trait_docstring
+                #[automatically_derived]
                 impl #into_trait for #variant_types {
                     fn #into_method (self) -> #name {
                         #name :: #variant_names (self)
@@ -513,12 +517,14 @@ impl ToTokens for SigmaEnum {
                     }
                 }
 
+                #[automatically_derived]
                 impl ::std::convert::From<#variant_types> for #name {
                     fn from(value: #variant_types) -> Self {
                         #into_trait :: #into_method (value)
                     }
                 }
 
+                #[automatically_derived]
                 impl<'a> ::std::convert::TryFrom<&'a #name> for &'a #variant_types {
                     type Error = #try_from_error;
                     fn try_from(value: &'a #name) -> Result<&'a #variant_types, #try_from_error > {
@@ -526,6 +532,7 @@ impl ToTokens for SigmaEnum {
                     }
                 }
 
+                #[automatically_derived]
                 impl ::std::convert::TryFrom<#name> for #variant_types
                         where Self: ::core::marker::Sized
                 {
@@ -536,6 +543,7 @@ impl ToTokens for SigmaEnum {
                 }
             )*
 
+            #[automatically_derived]
             impl #name {
                 #extract_owned_method_docstring
                 #visibility fn #extract_owned_method <T: #into_trait >(self) -> Option<T> {
@@ -550,6 +558,7 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
+            #[automatically_derived]
             pub struct #try_from_error;
 
             #[automatically_derived]
@@ -597,6 +606,7 @@ impl ToTokens for SigmaEnum {
                 }
             }
 
+            #[automatically_derived]
             impl ::std::fmt::Display for #try_from_error {
                 fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
                     f.write_str("attempted to extract value from a ")?;
@@ -607,6 +617,7 @@ impl ToTokens for SigmaEnum {
             }
 
            #try_from_error_docstring
+            #[automatically_derived]
             impl ::std::error::Error for #try_from_error {}
         });
     }

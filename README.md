@@ -194,6 +194,27 @@ These allow the construction and extraction of values with known types.
 `From`, `Into`, `TryFrom`, and `TryInto` will also be implemented for the
 enum and all types it contains as variants.
 
+## Public API generation
+
+Marking the enum `pub` will export the generated macros and traits as
+part of the public API.
+
+For public enums, you must use the `path` attribute to `sigma_enum` with the
+absolute path to the current module. This is a limitation of Rust's module
+system.
+
+```rust
+mod inner {
+    use sigma_enum::sigma_enum;
+    pub struct Foo;
+
+    #[sigma_enum(path = crate::inner)]
+    enum FooEnum {
+        __(Foo),
+    }
+}
+```
+
 ### Renaming generated items
 
 Generated items can be renamed and docstrings can be provided with the
@@ -226,6 +247,6 @@ enum Numeric {
 
 ## Additional information
 
-Derive macros and other enum annotations will work when placed below the
-`sigma_enum` macro. Variant annotations will be copied to every instance of
+Derive macros and other item attributes will work when placed below the
+`sigma_enum` macro. Variant attributes will be copied to every instance of
 the variant if expanded.

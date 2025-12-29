@@ -196,6 +196,7 @@ impl ToTokens for SigmaEnum {
         let extract_mut_method_docstring = self.attr.extract_mut_method.docstring();
         let try_from_error_docstring = self.attr.try_from_error.docstring();
 
+        // https://github.com/rust-lang/rust/pull/52234#issuecomment-1417098097
         let macro_match_export;
         let macro_construct_export;
         let macro_match_body_export;

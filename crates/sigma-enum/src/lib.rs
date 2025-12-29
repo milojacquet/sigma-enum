@@ -218,7 +218,7 @@
 //! | Enum extraction method             | `extract_method`        |
 //! | Enum owned extraction method       | `extract_owned_method`  |
 //! | Enum mut extraction method         | `extract_mut_method`    |
-//! | `TryFrom` error                    | `try_from_error`        |
+//! | Enum trait error                   | `try_from_error`        |
 //!
 //! ```rust
 //! # use sigma_enum::sigma_enum;

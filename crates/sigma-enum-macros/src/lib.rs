@@ -143,6 +143,12 @@ impl ToTokens for SigmaEnum {
             subattrs,
             attr,
         } = &self;
+
+        let path = match &attr.path {
+            Some(path) => quote! { $ #path :: },
+            None => quote! {},
+        };
+
         let variants_btree: BTreeMap<_, _> = variants
             .iter()
             .map(|var| (var.ty.clone(), var.name.clone()))
@@ -391,7 +397,7 @@ impl ToTokens for SigmaEnum {
             #macro_match_docstring
             macro_rules! #macro_match {
                 ( match $( $rest:tt )* ) => {
-                    #macro_match_body ! { (), ( $($rest)* ) }
+                    #path #macro_match_body ! { (), ( $($rest)* ) }
                 };
             }
             #macro_match_pub_use
@@ -404,10 +410,10 @@ impl ToTokens for SigmaEnum {
                 ( $what:tt, ({
                     $( $rest:tt )*
                 }) ) => {
-                    #macro_match_process_body !( $what, ( $($rest)* ), () )
+                    #path #macro_match_process_body !( $what, ( $($rest)* ), () )
                 };
                 ( ( $( $what:tt )* ), ( $next:tt $( $rest:tt )* ) ) => {
-                    #macro_match_body ! { ( $($what)* $next ), ( $($rest)* ) }
+                    #path #macro_match_body ! { ( $($what)* $next ), ( $($rest)* ) }
                 };
             }
             #macro_match_body_pub_use
@@ -423,12 +429,12 @@ impl ToTokens for SigmaEnum {
 
                         #[allow(unreachable_patterns)]
                         match what {
-                            $( #macro_match_pattern !($ty) => (), )*
+                            $( #path #macro_match_pattern !($ty) => (), )*
                         }
 
                         #[allow(unused_labels)]
                         'ma: {
-                            $( #macro_match_variant !{$ty; what; 'ma; $binding => $body} )*
+                            $( #path #macro_match_variant !{$ty; what; 'ma; $binding => $body} )*
                             ::std::unreachable!();
                         }
                     }
@@ -438,35 +444,35 @@ impl ToTokens for SigmaEnum {
                     ( $binding:ident => { $( $body:tt )* } $(,)? $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => $body ) ) )
+                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => $body ) ) )
                 };
                 (
                     $what:tt,
                     ( $binding:ident => $body:expr, $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => { $body } ) ) )
+                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => { $body } ) ) )
                 };
                 (
                     $what:tt,
                     ( $tyn:ident ( $binding:pat ) => { $( $body:tt )* } $(,)? $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn); $binding => { $($body)* } ) ) )
+                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn); $binding => { $($body)* } ) ) )
                 };
                 (
                     $what:tt,
                     ( $tyn:ident ( $binding:pat ) => $body:expr, $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn); $binding => { $body } ) ) )
+                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn); $binding => { $body } ) ) )
                 };
                 (
                     $what:tt,
                     ( $tyn:ident ::< $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #macro_process_type !( (@match, $what, $tyn, ($( $matched )*)), ($( $rest )*), (<), (<) )
+                    #path #macro_process_type !( (@match, $what, $tyn, ($( $matched )*)), ($( $rest )*), (<), (<) )
                 };
             }
             #macro_match_process_body_pub_use
@@ -477,10 +483,10 @@ impl ToTokens for SigmaEnum {
             #[doc(hidden)]
             macro_rules! #macro_process_type {
                 ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), (< $($counter:tt)*) ) => {
-                    #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* >), ($($counter)*) )
+                    #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* >), ($($counter)*) )
                 };
                 ( $bundle:tt, (>> $($rest:tt)*), ( $($params:tt)* ), (< < $($counter:tt)*) ) => {
-                    #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* > >), ($($counter)*) )
+                    #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* > >), ($($counter)*) )
                 };
                 ( $bundle:tt, (> $($rest:tt)*), ( $($params:tt)* ), () ) => {
                     ::std::compile_error!("imbalanced")
@@ -489,25 +495,25 @@ impl ToTokens for SigmaEnum {
                     ::std::compile_error!("imbalanced")
                 };
                 ( $bundle:tt, (< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* <), (< $($counter)*) )
+                    #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* <), (< $($counter)*) )
                 };
                 ( $bundle:tt, (<< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* < <), (< < $($counter)*) )
+                    #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* < <), (< < $($counter)*) )
                 };
                 ( (@match, $what:tt, $tyn:ident, ( $($matched:tt)* )), (( $binding:pat ) => { $( $body:tt )* } $(,)? $($rest:tt)*), ( $($params:tt)* ), () ) => {
-                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $($body)* } ) ) )
+                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $($body)* } ) ) )
                 };
                 ( (@match, $what:tt, $tyn:ident, ( $($matched:tt)* )), (( $binding:pat ) => $body:expr, $($rest:tt)*), ( $($params:tt)* ), () ) => {
-                    #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $body } ) ) )
+                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $body } ) ) )
                 };
                 ( (@construct, $tyn:ident), (( $expr:expr )), ( $($params:tt)+ ), () ) => {
-                    #macro_construct_inner !( ($tyn :: $($params)+); ( $expr ) )
+                    #path #macro_construct_inner !( ($tyn :: $($params)+); ( $expr ) )
                 };
                 ( $bundle:tt, (( $($any:tt)* ) $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
                     ::std::compile_error!("imbalanced or something")
                 };
                 ( $bundle:tt, ($thing:tt $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* $thing), ( $($counter)*) )
+                    #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* $thing), ( $($counter)*) )
                 };
             }
             #macro_process_type_pub_use
@@ -518,7 +524,7 @@ impl ToTokens for SigmaEnum {
             #[doc(hidden)]
             macro_rules! #macro_match_variant {
                 #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
-                    #( if let #name :: #pat_variant_names ($binding) = $what {
+                    #( if let #path #name :: #pat_variant_names ($binding) = $what {
                         #const_let_statements
                         break $ma($body);
                     } )*
@@ -532,7 +538,7 @@ impl ToTokens for SigmaEnum {
             #[doc(hidden)]
             macro_rules! #macro_match_pattern {
                 #( ( ( #pat_vars_names #(::< #( #pat_vars_params ),* >)* ) ) => {
-                    #( #name :: #pat_variant_names (_) )|*
+                    #( #path #name :: #pat_variant_names (_) )|*
                 }; )*
             }
             #macro_match_pattern_pub_use
@@ -544,7 +550,7 @@ impl ToTokens for SigmaEnum {
             #macro_construct_docstring
             macro_rules! #macro_construct {
                 ( $tyn:ident ::< $($tt:tt)* ) => {
-                    #macro_process_type !( (@construct, $tyn), ($($tt)*), (<), (<) )
+                    #path #macro_process_type !( (@construct, $tyn), ($($tt)*), (<), (<) )
                 };
             }
             #macro_construct_pub_use
@@ -558,7 +564,7 @@ impl ToTokens for SigmaEnum {
                     'ma: {
                         #( if true #(&& #pat_vars_params_eqs)* {
                             #const_let_statements
-                            break 'ma ::std::option::Option::Some(#name :: #pat_variant_names($body));
+                            break 'ma ::std::option::Option::Some(#path #name :: #pat_variant_names($body));
                         } )*
                         ::std::option::Option::None
                     }
@@ -579,29 +585,21 @@ impl ToTokens for SigmaEnum {
             fn #try_from_mut_method (value: &mut #name) -> Option<&mut Self>;
         };
 
-        if matches!(visibility, Visibility::Public(_)) {
-            tokens.append_all(quote! {
-                #into_trait_docstring
-                #[automatically_derived]
-                pub trait #into_trait : #into_trait_sealed_mod ::Sealed {
-                    #methods
-                }
+        tokens.append_all(quote! {
+            #into_trait_docstring
+            pub trait #into_trait : #into_trait_sealed_mod ::Sealed {
+                #methods
+            }
 
-                #[automatically_derived]
-                mod #into_trait_sealed_mod {
-                    pub trait Sealed {}
-                }
+            mod #into_trait_sealed_mod {
+                pub trait Sealed {}
+            }
 
-                #( impl #into_trait_sealed_mod ::Sealed for #variant_types {} )*
-            });
-        } else {
-            tokens.append_all(quote! {
+            #(
                 #[automatically_derived]
-                #visibility trait #into_trait {
-                    #methods
-                }
-            });
-        }
+                impl #into_trait_sealed_mod ::Sealed for #variant_types {}
+            )*
+        });
 
         tokens.append_all(quote! {
             #(
@@ -612,7 +610,7 @@ impl ToTokens for SigmaEnum {
                         #name :: #variant_names (self)
                     }
 
-                    fn #try_from_method <'a>(value: &'a #name) -> Option<&'a Self> {
+                    fn #try_from_method <'a>(value: &'a #name) -> ::std::option::Option<&'a Self> {
                         if let #name :: #variant_names (out) = value {
                             ::std::option::Option::Some(out)
                         } else {
@@ -620,7 +618,7 @@ impl ToTokens for SigmaEnum {
                         }
                     }
 
-                    fn #try_from_owned_method (value: #name) -> Option<Self>
+                    fn #try_from_owned_method (value: #name) -> ::std::option::Option<Self>
                         where Self: ::core::marker::Sized
                     {
                         if let #name :: #variant_names (out) = value {
@@ -630,7 +628,7 @@ impl ToTokens for SigmaEnum {
                         }
                     }
 
-                    fn #try_from_mut_method <'a>(value: &'a mut #name) -> Option<&'a mut Self> {
+                    fn #try_from_mut_method <'a>(value: &'a mut #name) -> ::std::option::Option<&'a mut Self> {
                         if let #name :: #variant_names (out) = value {
                             ::std::option::Option::Some(out)
                         } else {
@@ -665,7 +663,6 @@ impl ToTokens for SigmaEnum {
                 }
             )*
 
-            #[automatically_derived]
             impl #name {
                 #extract_method_docstring
                 #visibility fn #extract_method <T: #into_trait >(&self) -> Option<&T> {
@@ -685,7 +682,6 @@ impl ToTokens for SigmaEnum {
         });
 
         tokens.append_all(quote! {
-            #[automatically_derived]
             pub struct #try_from_error;
 
             #[automatically_derived]

@@ -10,6 +10,7 @@ use syn::Lit;
 use syn::Meta;
 use syn::MetaList;
 use syn::MetaNameValue;
+use syn::Path;
 use syn::Token;
 use syn::TypePath;
 use syn::parse::Parse;
@@ -92,6 +93,7 @@ impl Parse for PublicItem {
 pub struct ItemAttr {
     pub generics: BTreeMap<Ident, Vec<Option<TypePath>>>,
     pub alias: BTreeMap<Ident, TypePath>,
+    pub path: Option<Path>,
 
     pub macro_match: PublicItem,
     pub macro_construct: PublicItem,
@@ -144,6 +146,30 @@ impl Parse for ItemAttr {
                             },
                         );
                     }
+                }
+                "path" => {
+                    let Meta::NameValue(MetaNameValue { value, .. }) = meta else {
+                        return Err(syn::Error::new(meta.span(), "not list"));
+                    };
+                    let Expr::Path(ExprPath { path, .. }) = value else {
+                        return Err(syn::Error::new(value.span(), "not path"));
+                    };
+
+                    if path
+                        .segments
+                        .first()
+                        .ok_or_else(|| syn::Error::new(path.span(), "no path segments"))?
+                        .ident
+                        .to_string()
+                        != "crate"
+                    {
+                        return Err(syn::Error::new(
+                            path.span(),
+                            "path attribute is not absolute",
+                        ));
+                    }
+
+                    attr.path = Some(path);
                 }
                 "macro_match" => {
                     let MetaList { tokens, .. } = meta.require_list()?;

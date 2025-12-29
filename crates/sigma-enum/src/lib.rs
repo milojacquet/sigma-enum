@@ -307,6 +307,19 @@ mod tests {
     #[sigma_enum]
     enum EmptyEnum {}
 
+    // test if those in inner modules compile outside
+    pub mod inner {
+        use crate::sigma_enum;
+        use crate::tests::A;
+        use crate::tests::B;
+
+        #[sigma_enum(path = crate::tests::inner)]
+        pub enum AbEnumI {
+            __(A),
+            __(B),
+        }
+    }
+
     #[test]
     fn match_ab_enum() {
         assert_eq!(
@@ -319,6 +332,25 @@ mod tests {
 
         assert_eq!(
             ab_enum_match!(match AbEnum::A(A) {
+                B(_ab) => 1,
+                _ab => 2,
+            }),
+            2
+        );
+    }
+
+    #[test]
+    fn match_ab_enum_i() {
+        assert_eq!(
+            inner::ab_enum_i_match!(match inner::AbEnumI::A(A) {
+                A(_ab) => 1,
+                B(_ab) => 2,
+            }),
+            1
+        );
+
+        assert_eq!(
+            inner::ab_enum_i_match!(match inner::AbEnumI::A(A) {
                 B(_ab) => 1,
                 _ab => 2,
             }),

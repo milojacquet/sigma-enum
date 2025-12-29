@@ -3,6 +3,7 @@ use quote::quote;
 use std::collections::BTreeMap;
 use syn::Expr;
 use syn::ExprLit;
+use syn::ExprPath;
 use syn::ExprRange;
 use syn::Ident;
 use syn::Lit;
@@ -10,6 +11,7 @@ use syn::Meta;
 use syn::MetaList;
 use syn::MetaNameValue;
 use syn::Token;
+use syn::TypePath;
 use syn::parse::Parse;
 use syn::parse::ParseStream;
 use syn::parse::Parser;
@@ -17,8 +19,8 @@ use syn::parse2;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 
-#[derive(Debug, Clone)]
-struct GenericSpec(Ident, Vec<Option<Ident>>);
+#[derive(Clone)]
+struct GenericSpec(Ident, Vec<Option<TypePath>>);
 
 impl Parse for GenericSpec {
     fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -31,7 +33,7 @@ impl Parse for GenericSpec {
                 if input.parse::<Token![_]>().is_ok() {
                     Ok(None)
                 } else {
-                    input.parse::<Ident>().map(Some)
+                    input.parse::<TypePath>().map(Some)
                 }
             },
         )?
@@ -86,9 +88,11 @@ impl Parse for PublicItem {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct ItemAttr {
-    pub generics: BTreeMap<Ident, Vec<Option<Ident>>>,
+    pub generics: BTreeMap<Ident, Vec<Option<TypePath>>>,
+    pub alias: BTreeMap<Ident, TypePath>,
+
     pub macro_match: PublicItem,
     pub macro_construct: PublicItem,
     pub into_trait: PublicItem,
@@ -107,78 +111,81 @@ impl Parse for ItemAttr {
         for meta in metas {
             match meta.path().require_ident()?.to_string().as_str() {
                 "generic" => {
-                    let Meta::List(MetaList { tokens, .. }) = meta else {
-                        return Err(syn::Error::new(meta.span(), "not list"));
-                    };
+                    let MetaList { tokens, .. } = meta.require_list()?;
                     let generics: Punctuated<GenericSpec, Token![,]> =
-                        Parser::parse2(Punctuated::parse_terminated, tokens)?;
+                        Parser::parse2(Punctuated::parse_terminated, tokens.clone())?;
                     for GenericSpec(ident, params) in generics {
                         if attr.generics.insert(ident.clone(), params).is_some() {
                             return Err(syn::Error::new(ident.span(), "duplicate ident"));
                         }
                     }
                 }
+                "alias" => {
+                    let MetaList { tokens, .. } = meta.require_list()?;
+
+                    let aliases: Punctuated<MetaNameValue, Token![,]> =
+                        Parser::parse2(Punctuated::parse_terminated, tokens.clone())?;
+
+                    for MetaNameValue {
+                        path: ident, value, ..
+                    } in aliases
+                    {
+                        let ident = ident.require_ident()?;
+                        let Expr::Path(ExprPath { qself, path, .. }) = value else {
+                            return Err(syn::Error::new(value.span(), "not path"));
+                        };
+                        attr.alias.insert(
+                            ident.clone(),
+                            TypePath {
+                                qself: qself.clone(),
+                                path: path.clone(),
+                            },
+                        );
+                    }
+                }
                 "macro_match" => {
-                    let Meta::List(MetaList { tokens, .. }) = meta else {
-                        return Err(syn::Error::new(meta.span(), "not list"));
-                    };
-                    let public_item: PublicItem = parse2(tokens)?;
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.macro_match = public_item;
                 }
                 "macro_construct" => {
-                    let Meta::List(MetaList { tokens, .. }) = meta else {
-                        return Err(syn::Error::new(meta.span(), "not list"));
-                    };
-                    let public_item: PublicItem = parse2(tokens)?;
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.macro_construct = public_item;
                 }
                 "into_trait" => {
-                    let Meta::List(MetaList { tokens, .. }) = meta else {
-                        return Err(syn::Error::new(meta.span(), "not list"));
-                    };
-                    let public_item: PublicItem = parse2(tokens)?;
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.into_trait = public_item;
                 }
                 "into_method" => {
-                    let Meta::List(MetaList { tokens, .. }) = meta else {
-                        return Err(syn::Error::new(meta.span(), "not list"));
-                    };
-                    let public_item: PublicItem = parse2(tokens)?;
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.into_method = public_item;
                 }
                 "try_from_owned_method" => {
-                    let Meta::List(MetaList { tokens, .. }) = meta else {
-                        return Err(syn::Error::new(meta.span(), "not list"));
-                    };
-                    let public_item: PublicItem = parse2(tokens)?;
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.try_from_owned_method = public_item;
                 }
                 "try_from_method" => {
-                    let Meta::List(MetaList { tokens, .. }) = meta else {
-                        return Err(syn::Error::new(meta.span(), "not list"));
-                    };
-                    let public_item: PublicItem = parse2(tokens)?;
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.try_from_method = public_item;
                 }
                 "extract_owned_method" => {
-                    let Meta::List(MetaList { tokens, .. }) = meta else {
-                        return Err(syn::Error::new(meta.span(), "not list"));
-                    };
-                    let public_item: PublicItem = parse2(tokens)?;
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.extract_owned_method = public_item;
                 }
                 "extract_method" => {
-                    let Meta::List(MetaList { tokens, .. }) = meta else {
-                        return Err(syn::Error::new(meta.span(), "not list"));
-                    };
-                    let public_item: PublicItem = parse2(tokens)?;
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.extract_method = public_item;
                 }
                 "try_from_error" => {
-                    let Meta::List(MetaList { tokens, .. }) = meta else {
-                        return Err(syn::Error::new(meta.span(), "not list"));
-                    };
-                    let public_item: PublicItem = parse2(tokens)?;
+                    let MetaList { tokens, .. } = meta.require_list()?;
+                    let public_item: PublicItem = parse2(tokens.clone())?;
                     attr.try_from_error = public_item;
                 }
                 _ => {}

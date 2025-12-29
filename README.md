@@ -85,21 +85,40 @@ standard variant, it can be used to select a name for the variant. Used on a
 variant with the `expand` attribute, a format string can be provided and the
 metavariables used will be interpolated into it.
 
+Since the const generic types are used in macros, fully qualified names
+should be used.
+
 ```rust
 struct Array<T, const N: usize>([T; N]);
 
-#[sigma_enum(generic(Array<_ ,usize>))]
+#[sigma_enum(generic(Array<_, ::std::primitive::usize>))]
 enum BytesEnum {
     #[sigma_enum(expand(N = 0..3), rename = "ByteArray{N}")]
     __(Array<u8, N>),
 }
 
 // equivalent to
-#[sigma_enum(generic(Array<_ ,usize>))]
+#[sigma_enum(generic(Array<_, ::std::primitive::usize>))]
 enum BytesEnum2 {
     ByteArray0(Array<u8, 0>),
     ByteArray1(Array<u8, 1>),
     ByteArray2(Array<u8, 2>),
+}
+```
+
+### Renaming types
+
+The only types allowed in the enum specifications are those written as a
+single identifier. For more complex types, use the `alias` attribute.
+
+```rust
+mod inner {
+    pub struct Foo;
+}
+
+#[sigma_enum(alias(Foo = inner::Foo))]
+enum Foo {
+    __(Foo),
 }
 ```
 

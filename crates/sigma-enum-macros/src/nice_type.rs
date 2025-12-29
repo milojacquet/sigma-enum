@@ -1,3 +1,4 @@
+use proc_macro2::TokenStream;
 use quote::ToTokens;
 use quote::TokenStreamExt;
 use quote::format_ident;
@@ -10,6 +11,7 @@ use syn::GenericArgument;
 use syn::Ident;
 use syn::Lit;
 use syn::Type;
+use syn::TypePath;
 use syn::parse::Parse;
 use syn::parse::ParseStream;
 use syn::spanned::Spanned;
@@ -233,6 +235,26 @@ impl NiceType<Infallible> {
 
     pub fn variant_name(&self) -> Ident {
         format_ident!("{}", self.variant_name_string())
+    }
+
+    pub fn to_tokens_aliased(&self, alias: &BTreeMap<Ident, TypePath>) -> TokenStream {
+        match self {
+            Self::Never => quote! { ! },
+            Self::Ident(name, tys) => {
+                let name = format_ident!("{}", name);
+                let name = match alias.get(&name) {
+                    Some(ty) => quote! { #ty },
+                    None => quote! { #name },
+                };
+                if tys.is_empty() {
+                    name
+                } else {
+                    quote! { #name < #(#tys),* > }
+                }
+            }
+            Self::Literal(lit) => quote! { #lit },
+            Self::PatternIdent(p) => quote! { #p },
+        }
     }
 }
 

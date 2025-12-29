@@ -126,13 +126,17 @@ impl ToTokens for SigmaEnum {
             name,
             variants,
             subattrs,
-            attr: _,
+            attr,
         } = &self;
         let variants_btree: BTreeMap<_, _> = variants
             .iter()
             .map(|var| (var.ty.clone(), var.name.clone()))
             .collect();
-        let variant_types: Vec<_> = variants.iter().map(|var| var.ty.clone()).collect();
+        let variant_pats: Vec<_> = variants.iter().map(|var| var.ty.clone()).collect();
+        let variant_types: Vec<_> = variants
+            .iter()
+            .map(|var| var.ty.to_tokens_aliased(&attr.alias))
+            .collect();
         let variant_names: Vec<_> = variants.iter().map(|var| var.name.clone()).collect();
         let variant_attrs: Vec<_> = variants.iter().map(|var| var.attrs.clone()).collect();
 
@@ -173,7 +177,7 @@ impl ToTokens for SigmaEnum {
 
         let mut patterns_map = BTreeMap::new();
         patterns_map.insert(NiceType::PatternIdent(()), Vec::new());
-        for ty in &variant_types {
+        for ty in &variant_pats {
             for pat in ty.patterns_matching() {
                 let matches = patterns_map.entry(pat).or_insert(Vec::new());
                 matches.push(ty);

@@ -68,7 +68,7 @@
 //! }
 //!
 //! // equivalent to
-//! #[sigma_enum(generic(Array<_ ,usize>))]
+//! #[sigma_enum(generic(Array<_, ::std::primitive::usize>))]
 //! enum BytesEnum2 {
 //!     __(Array<u8, 0>),
 //!     __(Array<u8, 1>),
@@ -87,22 +87,42 @@
 //! variant with the `expand` attribute, a format string can be provided and the
 //! metavariables used will be interpolated into it.
 //!
+//! Since the const generic types are used in macros, fully qualified names
+//! should be used.
+//!
 //! ```rust
 //! # use sigma_enum::sigma_enum;
 //! struct Array<T, const N: usize>([T; N]);
 //!
-//! #[sigma_enum(generic(Array<_ ,usize>))]
+//! #[sigma_enum(generic(Array<_, ::std::primitive::usize>))]
 //! enum BytesEnum {
 //!     #[sigma_enum(expand(N = 0..3), rename = "ByteArray{N}")]
 //!     __(Array<u8, N>),
 //! }
 //!
 //! // equivalent to
-//! #[sigma_enum(generic(Array<_ ,usize>))]
+//! #[sigma_enum(generic(Array<_, ::std::primitive::usize>))]
 //! enum BytesEnum2 {
 //!     ByteArray0(Array<u8, 0>),
 //!     ByteArray1(Array<u8, 1>),
 //!     ByteArray2(Array<u8, 2>),
+//! }
+//! ```
+//!
+//! ### Renaming types
+//!
+//! The only types allowed in the enum specifications are those written as a
+//! single identifier. For more complex types, use the `alias` attribute.
+//!
+//! ```rust
+//! # use sigma_enum::sigma_enum;
+//! mod inner {
+//!     pub struct Foo;
+//! }
+//!
+//! #[sigma_enum(alias(Foo = inner::Foo))]
+//! enum Foo {
+//!     __(Foo),
 //! }
 //! ```
 //!
@@ -234,19 +254,19 @@ mod tests {
         __(B),
     }
 
-    struct Foo<T>(T);
-    impl Foo<A> {
+    struct FooType<T>(T);
+    impl FooType<A> {
         fn is_a(&self) -> bool {
             true
         }
     }
-    impl Foo<B> {
+    impl FooType<B> {
         fn is_a(&self) -> bool {
             false
         }
     }
 
-    #[sigma_enum]
+    #[sigma_enum(alias(Foo = FooType))]
     enum FooEnum {
         __(Foo<A>),
         __(Foo<B>),
@@ -258,11 +278,11 @@ mod tests {
     struct Nu<M>(M);
 
     #[sigma_enum(
-    generic(Mu<usize>),
-    macro_match(name = nu_match, docs =
+        generic(Mu<usize>),
+        macro_match(name = nu_match, docs =
 "A macro to match Nu."
-),
-)]
+        ),
+    )]
     #[derive(Debug, Clone, Copy)]
     #[non_exhaustive]
     enum NuEnum {
@@ -307,19 +327,19 @@ mod tests {
     #[test]
     fn match_foo_enum() {
         assert_eq!(
-            foo_enum_match!(match FooEnum::Foo_B(Foo(B)) {
+            foo_enum_match!(match FooEnum::Foo_B(FooType(B)) {
                 Foo::<A>(_foo) => 1,
                 Foo::<B>(_foo) => 2,
             }),
             2
         );
 
-        assert!(foo_enum_match!(match FooEnum::Foo_A(Foo(A)) {
+        assert!(foo_enum_match!(match FooEnum::Foo_A(FooType(A)) {
             Foo::<?T>(foo) => foo.is_a(),
             Foo::<A>(_foo) => false, // intentionally does not match
         }),);
 
-        assert!(foo_enum_match!(match FooEnum::Foo_A(Foo(A)) {
+        assert!(foo_enum_match!(match FooEnum::Foo_A(FooType(A)) {
             foo => foo.is_a(),
         }),);
     }

@@ -444,7 +444,7 @@ impl ToTokens for SigmaEnum {
                     ( $binding:ident => { $( $body:tt )* } $(,)? $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => $body ) ) )
+                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => { $( $body )* } ) ) )
                 };
                 (
                     $what:tt,

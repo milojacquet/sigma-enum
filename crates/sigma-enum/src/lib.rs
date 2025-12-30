@@ -215,7 +215,7 @@
 //! For `pub(crate)` enums and other enums whose macros you intend to use in
 //! another module of the crate, you must add the `path` attribute that contains
 //! the absolute path to the module. This generates another set of macros whose
-//! names are suffixed by `_crate`
+//! names are suffixed by `_crate`.
 //!
 //! ```rust
 //! pub mod inner {

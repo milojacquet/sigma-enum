@@ -132,15 +132,13 @@ impl SigmaEnum {
             which
         )
     }
-}
 
-impl ToTokens for SigmaEnum {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+    fn to_tokens_macros(&self, tokens: &mut proc_macro2::TokenStream) {
         let SigmaEnum {
-            visibility,
+            visibility: _,
             name,
             variants,
-            subattrs,
+            subattrs: _,
             attr,
         } = &self;
 
@@ -154,12 +152,6 @@ impl ToTokens for SigmaEnum {
             .map(|var| (var.ty.clone(), var.name.clone()))
             .collect();
         let variant_pats: Vec<_> = variants.iter().map(|var| var.ty.clone()).collect();
-        let variant_types: Vec<_> = variants
-            .iter()
-            .map(|var| var.ty.to_tokens_aliased(&attr.alias))
-            .collect();
-        let variant_names: Vec<_> = variants.iter().map(|var| var.name.clone()).collect();
-        let variant_attrs: Vec<_> = variants.iter().map(|var| var.attrs.clone()).collect();
 
         let macro_match_internal = self.internal_name("match");
         let macro_construct_internal = self.internal_name("construct");
@@ -173,28 +165,8 @@ impl ToTokens for SigmaEnum {
         let macro_match_public = self.macro_match_name();
         let macro_construct_public = self.macro_construct_name();
 
-        let into_trait = self.into_trait_name();
-        let into_trait_sealed_mod = self.internal_name("into_trait_sealed_mod");
-        let into_method = self.into_method_name();
-        let try_from_method = self.try_from_method_name();
-        let try_from_owned_method = self.try_from_owned_method_name();
-        let try_from_mut_method = self.try_from_mut_method_name();
-        let extract_method = self.extract_method_name();
-        let extract_owned_method = self.extract_owned_method_name();
-        let extract_mut_method = self.extract_mut_method_name();
-        let try_from_error = self.try_from_error_name();
-
         let macro_match_docstring = self.attr.macro_match.docstring();
         let macro_construct_docstring = self.attr.macro_construct.docstring();
-        let into_trait_docstring = self.attr.into_trait.docstring();
-        let into_method_docstring = self.attr.into_method.docstring();
-        let try_from_method_docstring = self.attr.try_from_method.docstring();
-        let try_from_owned_method_docstring = self.attr.try_from_owned_method.docstring();
-        let try_from_mut_method_docstring = self.attr.try_from_mut_method.docstring();
-        let extract_method_docstring = self.attr.extract_method.docstring();
-        let extract_owned_method_docstring = self.attr.extract_owned_method.docstring();
-        let extract_mut_method_docstring = self.attr.extract_mut_method.docstring();
-        let try_from_error_docstring = self.attr.try_from_error.docstring();
 
         // https://github.com/rust-lang/rust/pull/52234#issuecomment-1417098097
         let macro_match;
@@ -300,8 +272,6 @@ impl ToTokens for SigmaEnum {
             }
         }
 
-        // panic!("{:?}", patterns_map);
-
         let patterns: Vec<_> = patterns_map.keys().collect();
         let pat_variants: Vec<_> = patterns_map.values().collect();
         let pat_variant_names: Vec<Vec<_>> = pat_variants
@@ -386,16 +356,6 @@ impl ToTokens for SigmaEnum {
                 _ => panic!("not ident {:?}", pat),
             })
             .unzip();
-
-        tokens.append_all(quote! {
-            #(#subattrs)*
-            #visibility enum #name {
-                #(
-                    #(#variant_attrs)*
-                    #variant_names(#variant_types),
-                )*
-            }
-        });
 
         tokens.append_all(quote! {
             #macro_match_export
@@ -577,6 +537,43 @@ impl ToTokens for SigmaEnum {
             }
             #macro_construct_inner_pub_use
         });
+    }
+
+    fn to_tokens_traits(&self, tokens: &mut proc_macro2::TokenStream) {
+        let SigmaEnum {
+            visibility,
+            name,
+            variants,
+            subattrs: _,
+            attr,
+        } = &self;
+
+        let variant_types: Vec<_> = variants
+            .iter()
+            .map(|var| var.ty.to_tokens_aliased(&attr.alias))
+            .collect();
+        let variant_names: Vec<_> = variants.iter().map(|var| var.name.clone()).collect();
+
+        let into_trait = self.into_trait_name();
+        let into_trait_sealed_mod = self.internal_name("into_trait_sealed_mod");
+        let into_method = self.into_method_name();
+        let try_from_method = self.try_from_method_name();
+        let try_from_owned_method = self.try_from_owned_method_name();
+        let try_from_mut_method = self.try_from_mut_method_name();
+        let extract_method = self.extract_method_name();
+        let extract_owned_method = self.extract_owned_method_name();
+        let extract_mut_method = self.extract_mut_method_name();
+        let try_from_error = self.try_from_error_name();
+
+        let into_trait_docstring = self.attr.into_trait.docstring();
+        let into_method_docstring = self.attr.into_method.docstring();
+        let try_from_method_docstring = self.attr.try_from_method.docstring();
+        let try_from_owned_method_docstring = self.attr.try_from_owned_method.docstring();
+        let try_from_mut_method_docstring = self.attr.try_from_mut_method.docstring();
+        let extract_method_docstring = self.attr.extract_method.docstring();
+        let extract_owned_method_docstring = self.attr.extract_owned_method.docstring();
+        let extract_mut_method_docstring = self.attr.extract_mut_method.docstring();
+        let try_from_error_docstring = self.attr.try_from_error.docstring();
 
         let methods = quote! {
             #into_method_docstring
@@ -748,6 +745,38 @@ impl ToTokens for SigmaEnum {
             #[automatically_derived]
             impl ::std::error::Error for #try_from_error {}
         });
+    }
+}
+
+impl ToTokens for SigmaEnum {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let SigmaEnum {
+            visibility,
+            name,
+            variants,
+            subattrs,
+            attr,
+        } = &self;
+
+        let variant_types: Vec<_> = variants
+            .iter()
+            .map(|var| var.ty.to_tokens_aliased(&attr.alias))
+            .collect();
+        let variant_names: Vec<_> = variants.iter().map(|var| var.name.clone()).collect();
+        let variant_attrs: Vec<_> = variants.iter().map(|var| var.attrs.clone()).collect();
+
+        tokens.append_all(quote! {
+            #(#subattrs)*
+            #visibility enum #name {
+                #(
+                    #(#variant_attrs)*
+                    #variant_names(#variant_types),
+                )*
+            }
+        });
+
+        self.to_tokens_macros(tokens);
+        self.to_tokens_traits(tokens);
     }
 }
 

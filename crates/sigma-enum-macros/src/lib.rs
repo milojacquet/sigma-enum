@@ -142,9 +142,13 @@ impl SigmaEnum {
             attr,
         } = &self;
 
-        let path = match &attr.path {
-            Some(path) => quote! { $ #path :: },
-            None => quote! {},
+        let path = if export {
+            quote! { $crate :: }
+        } else {
+            match &attr.path {
+                Some(path) => quote! { $ #path :: },
+                None => quote! {},
+            }
         };
 
         let variants_btree: BTreeMap<_, _> = variants

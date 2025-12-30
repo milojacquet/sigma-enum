@@ -1,4 +1,4 @@
 [workspace]
 
 resolver = "3"
-members = ["crates/*", "other/macro-export-test"]
+members = ["crates/*", "other/macro-export-test", "other/macro-export-test-out"]

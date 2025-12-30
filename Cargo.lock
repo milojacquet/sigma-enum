@@ -50,6 +50,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "macro-export-test-out"
+version = "0.1.0"
+dependencies = [
+ "macro-export-test",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"

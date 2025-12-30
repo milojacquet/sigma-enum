@@ -229,8 +229,8 @@
 //! }
 //!
 //! # fn main(){
-//! inner::foo_enum_construct_crate!(Foo(Foo));
-//! // foo_enum_construct!(Foo(Foo)); // cannot refer to this macro
+//! inner::foo_enum_construct_crate!(Foo(inner::Foo));
+//! // foo_enum_construct!(Foo(inner::Foo)); // cannot refer to this macro
 //! # }
 //! ```
 //!
@@ -357,10 +357,8 @@ mod tests {
 
     #[test]
     fn match_ab_enum() {
-        let a = ab_enum_construct_crate!(A(A));
-
         assert_eq!(
-            ab_enum_match_crate!(match a {
+            ab_enum_match_crate!(match ab_enum_construct_crate!(A(A)).unwrap() {
                 A(_ab) => 1,
                 B(_ab) => 2,
             }),
@@ -368,7 +366,7 @@ mod tests {
         );
 
         assert_eq!(
-            ab_enum_match_crate!(match a {
+            ab_enum_match_crate!(match ab_enum_construct_crate!(A(A)).unwrap() {
                 B(_ab) => 1,
                 _ab => 2,
             }),

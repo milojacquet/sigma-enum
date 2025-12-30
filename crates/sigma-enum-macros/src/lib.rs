@@ -480,6 +480,9 @@ impl SigmaEnum {
                 ( $tyn:ident ::< $($tt:tt)* ) => {
                     #path #macro_process_type !( (@construct, $tyn), ($($tt)*), (<), (<) )
                 };
+                ( $tyn:ident ( $body:expr ) ) => {
+                    #path #macro_construct_inner !( ($tyn); ($body) )
+                };
             }
             #macro_construct_pub_use
         });

@@ -465,6 +465,7 @@ impl SigmaEnum {
             #macro_match_pattern_export
             #[doc(hidden)]
             macro_rules! #macro_match_pattern {
+                ( ( #internal_full_wildcard ) ) => { _ };
                 #( ( ( #pat_vars_names #(::< #( #pat_vars_params ),* >)* ) ) => {
                     #( #path #name :: #pat_variant_names (_) )|*
                 }; )*

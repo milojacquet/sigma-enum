@@ -43,8 +43,8 @@ enum Numeric {
 }
 ```
 
-The name of the variants will be automatically generated if they start with
-an underscore, and the provided names will be used instead.
+The names of the variants will be automatically generated if the provided names start with
+an underscore, and the provided names will be used otherwise.
 
 Generating an enum that simulates a type that depends on a const generic
 value can be done by using the const generic in the type, or in shorthand
@@ -55,11 +55,13 @@ In order to use const generics in an enum, the attribute macro should be
 annotated with the const generic types used within using the `generic`
 attribute. If not, certain functionality will be unavailable. Non-const
 generics can be annotated with `_`.
+Since the const generic types are used in declarative macros, fully
+qualified names should be used.
 
 ```rust
 struct Array<T, const N: usize>([T; N]);
 
-#[sigma_enum]
+#[sigma_enum(generic(Array<_, ::std::primitive::usize>))]
 enum BytesEnum {
     #[sigma_enum(expand(N = 0..3))]
     __(Array<u8, N>),
@@ -85,9 +87,6 @@ standard variant, it can be used to select a name for the variant. Used on a
 variant with the `expand` attribute, a format string can be provided and the
 metavariables used will be interpolated into it.
 
-Since the const generic types are used in macros, fully qualified names
-should be used.
-
 ```rust
 struct Array<T, const N: usize>([T; N]);
 
@@ -108,8 +107,9 @@ enum BytesEnum2 {
 
 ### Renaming types
 
-The only types allowed in the enum specifications are those written as a
-single identifier. For more complex types, use the `alias` attribute.
+The only types allowed in variant specifications are those written as
+unqualified identifiers, optionally with generic parameters. For qualified
+type names, use the `alias` attribute.
 
 ```rust
 mod inner {
@@ -170,10 +170,10 @@ fn displayed(bytes: BytesEnum) -> String {
 
 ## Traits
 
-The `sigma_enum` macro also generates a conversion trait for each macro with
-three methods: construction, extraction, and owned extraction, each for
-types known at compile time. Helper methods on the enum for extraction and
-owned extraction are also generated.
+The `sigma_enum` macro also generates a conversion trait for each enum with
+methods for constructing values of the enum of a known variant and
+extracting a value of a known type from the enum. Helper methods on the enum
+for extraction are also generated.
 
 ```rust
 struct Bytes<const N: usize>([u8; N]);
@@ -189,9 +189,7 @@ let bytes: &Bytes<2> = Bytes::<2>::try_from_bytes_enum(&bytes_enum).unwrap(); //
 let bytes: Bytes<2> = bytes_enum.extract_owned().unwrap();
 ```
 
-These allow the construction and extraction of values with known types.
-
-`From`, `Into`, `TryFrom`, and `TryInto` will also be implemented for the
+`From`, `Into`, `TryFrom`, and `TryInto` will also be implemented between the
 enum and all types it contains as variants.
 
 ## Public API generation
@@ -199,13 +197,16 @@ enum and all types it contains as variants.
 Marking the enum `pub` will export the generated macros and traits as
 part of the public API.
 
+For enums whose macros you intend to use in
+another module of the crate, you must add the `path` attribute that contains
+the absolute path to the module.
+
 For public enums, you may not use the generated macros in the same crate
 they were defined in. This is a limitation of Rust's macro system
 (cf. [issue #52234](https://github.com/rust-lang/rust/pull/52234)).
-For `pub(crate)` enums and other enums whose macros you intend to use in
-another module of the crate, you must add the `path` attribute that contains
-the absolute path to the module. This generates another set of macros whose
-names are suffixed by `_crate`
+In this case, adding the `path` attribute will generate two sets of macros:
+one that is exported at the crate root, and another usable in the definition
+crate whose names are suffixed by `_crate`.
 
 ```rust
 pub mod inner {

@@ -16,7 +16,6 @@ use syn::Expr;
 use syn::Ident;
 use syn::LitStr;
 use syn::Token;
-use syn::VisRestricted;
 use syn::Visibility;
 use syn::braced;
 use syn::parenthesized;
@@ -125,15 +124,16 @@ impl SigmaEnum {
         )
     }
 
-    fn internal_name(&self, which: &str) -> Ident {
+    fn internal_name(&self, which: &str, suffix: &str) -> Ident {
         format_ident!(
-            "{INTERNAL_IDENT}_{}_{}",
+            "{INTERNAL_IDENT}_{}_{}{}",
             self.name.to_string().to_snake_case(),
-            which
+            which,
+            suffix
         )
     }
 
-    fn to_tokens_macros(&self, tokens: &mut proc_macro2::TokenStream) {
+    fn to_tokens_macros(&self, tokens: &mut proc_macro2::TokenStream, export: bool, suffix: &str) {
         let SigmaEnum {
             visibility: _,
             name,
@@ -153,24 +153,19 @@ impl SigmaEnum {
             .collect();
         let variant_pats: Vec<_> = variants.iter().map(|var| var.ty.clone()).collect();
 
-        let macro_match_internal = self.internal_name("match");
-        let macro_construct_internal = self.internal_name("construct");
-        let macro_match_body = self.internal_name("body");
-        let macro_match_process_body = self.internal_name("process_body");
-        let macro_process_type = self.internal_name("process_type");
-        let macro_match_variant = self.internal_name("variant");
-        let macro_match_pattern = self.internal_name("pattern");
-        let macro_construct_inner = self.internal_name("construct_inner");
-
-        let macro_match_public = self.macro_match_name();
-        let macro_construct_public = self.macro_construct_name();
+        let macro_match = format_ident!("{}{}", self.macro_match_name(), suffix);
+        let macro_construct = format_ident!("{}{}", self.macro_construct_name(), suffix);
+        let macro_match_body = self.internal_name("body", suffix);
+        let macro_match_process_body = self.internal_name("process_body", suffix);
+        let macro_process_type = self.internal_name("process_type", suffix);
+        let macro_match_variant = self.internal_name("variant", suffix);
+        let macro_match_pattern = self.internal_name("pattern", suffix);
+        let macro_construct_inner = self.internal_name("construct_inner", suffix);
 
         let macro_match_docstring = self.attr.macro_match.docstring();
         let macro_construct_docstring = self.attr.macro_construct.docstring();
 
         // https://github.com/rust-lang/rust/pull/52234#issuecomment-1417098097
-        let macro_match;
-        let macro_construct;
         let macro_match_export;
         let macro_construct_export;
         let macro_match_body_export;
@@ -187,78 +182,46 @@ impl SigmaEnum {
         let macro_match_variant_pub_use;
         let macro_match_pattern_pub_use;
         let macro_construct_inner_pub_use;
-        match &self.visibility {
-            Visibility::Public(_) => {
-                macro_match = macro_match_public.clone();
-                macro_construct = macro_construct_public.clone();
-                macro_match_export = quote! { #macro_match_docstring #[macro_export] };
-                macro_construct_export = quote! { #macro_construct_docstring #[macro_export] };
-                macro_match_body_export = quote! { #[macro_export] };
-                macro_match_process_body_export = quote! { #[macro_export] };
-                macro_process_type_export = quote! { #[macro_export] };
-                macro_match_variant_export = quote! { #[macro_export] };
-                macro_match_pattern_export = quote! { #[macro_export] };
-                macro_construct_inner_export = quote! { #[macro_export] };
-                macro_match_pub_use =
-                    quote! { #macro_match_docstring pub use #macro_match as #macro_match_public; };
-                macro_construct_pub_use = quote! { #macro_construct_docstring pub use #macro_construct as #macro_construct_public; };
-                macro_match_body_pub_use = quote! { #[doc(hidden)] pub use #macro_match_body; };
-                macro_match_process_body_pub_use =
-                    quote! { #[doc(hidden)] pub use #macro_match_process_body; };
-                macro_process_type_pub_use = quote! { #[doc(hidden)] pub use #macro_process_type; };
-                macro_match_variant_pub_use =
-                    quote! { #[doc(hidden)] pub use #macro_match_variant; };
-                macro_match_pattern_pub_use =
-                    quote! { #[doc(hidden)] pub use #macro_match_pattern; };
-                macro_construct_inner_pub_use =
-                    quote! { #[doc(hidden)] pub use #macro_construct_inner; };
-            }
-            Visibility::Restricted(VisRestricted { path, .. }) => {
-                macro_match = macro_match_internal;
-                macro_construct = macro_construct_internal;
-                macro_match_export = quote! { #macro_match_docstring };
-                macro_construct_export = quote! { #macro_construct_docstring };
-                macro_match_body_export = quote! {};
-                macro_match_process_body_export = quote! {};
-                macro_process_type_export = quote! {};
-                macro_match_variant_export = quote! {};
-                macro_match_pattern_export = quote! {};
-                macro_construct_inner_export = quote! {};
-                macro_match_pub_use = quote! { #macro_match_docstring pub(#path) use #macro_match as #macro_match_public; };
-                macro_construct_pub_use = quote! { #macro_construct_docstring pub(#path) use #macro_construct as #macro_construct_public; };
-                macro_match_body_pub_use =
-                    quote! { #[doc(hidden)] pub(#path) use #macro_match_body; };
-                macro_match_process_body_pub_use =
-                    quote! { #[doc(hidden)] pub(#path) use #macro_match_process_body; };
-                macro_process_type_pub_use =
-                    quote! { #[doc(hidden)] pub(#path) use #macro_process_type; };
-                macro_match_variant_pub_use =
-                    quote! { #[doc(hidden)] pub(#path) use #macro_match_variant; };
-                macro_match_pattern_pub_use =
-                    quote! { #[doc(hidden)] pub(#path) use #macro_match_pattern; };
-                macro_construct_inner_pub_use =
-                    quote! { #[doc(hidden)] pub(#path) use #macro_construct_inner; };
-            }
-            Visibility::Inherited => {
-                macro_match = macro_match_public;
-                macro_construct = macro_construct_public;
-                macro_match_export = quote! {};
-                macro_construct_export = quote! {};
-                macro_match_body_export = quote! {};
-                macro_match_process_body_export = quote! {};
-                macro_process_type_export = quote! {};
-                macro_match_variant_export = quote! {};
-                macro_match_pattern_export = quote! {};
-                macro_construct_inner_export = quote! {};
-                macro_match_pub_use = quote! {};
-                macro_construct_pub_use = quote! {};
-                macro_match_body_pub_use = quote! {};
-                macro_match_process_body_pub_use = quote! {};
-                macro_process_type_pub_use = quote! {};
-                macro_match_variant_pub_use = quote! {};
-                macro_match_pattern_pub_use = quote! {};
-                macro_construct_inner_pub_use = quote! {};
-            }
+        if export {
+            macro_match_export = quote! { #macro_match_docstring #[macro_export] };
+            macro_construct_export = quote! { #macro_construct_docstring #[macro_export] };
+            macro_match_body_export = quote! { #[macro_export] };
+            macro_match_process_body_export = quote! { #[macro_export] };
+            macro_process_type_export = quote! { #[macro_export] };
+            macro_match_variant_export = quote! { #[macro_export] };
+            macro_match_pattern_export = quote! { #[macro_export] };
+            macro_construct_inner_export = quote! { #[macro_export] };
+            macro_match_pub_use = quote! {};
+            macro_construct_pub_use = quote! {};
+            macro_match_body_pub_use = quote! {};
+            macro_match_process_body_pub_use = quote! {};
+            macro_process_type_pub_use = quote! {};
+            macro_match_variant_pub_use = quote! {};
+            macro_match_pattern_pub_use = quote! {};
+            macro_construct_inner_pub_use = quote! {};
+        } else {
+            macro_match_export = quote! { #macro_match_docstring };
+            macro_construct_export = quote! { #macro_construct_docstring };
+            macro_match_body_export = quote! {};
+            macro_match_process_body_export = quote! {};
+            macro_process_type_export = quote! {};
+            macro_match_variant_export = quote! {};
+            macro_match_pattern_export = quote! {};
+            macro_construct_inner_export = quote! {};
+            macro_match_pub_use = quote! { #macro_match_docstring pub(crate) use #macro_match; };
+            macro_construct_pub_use =
+                quote! { #macro_construct_docstring pub(crate) use #macro_construct; };
+            macro_match_body_pub_use = quote! { #[doc(hidden)] pub(crate) use #macro_match_body; };
+            macro_match_process_body_pub_use =
+                quote! { #[doc(hidden)] pub(crate) use #macro_match_process_body; };
+            macro_process_type_pub_use =
+                quote! { #[doc(hidden)] pub(crate) use #macro_process_type; };
+            macro_match_variant_pub_use =
+                quote! { #[doc(hidden)] pub(crate) use #macro_match_variant; };
+            macro_match_pattern_pub_use =
+                quote! { #[doc(hidden)] pub(crate) use #macro_match_pattern; };
+            macro_construct_inner_pub_use =
+                quote! { #[doc(hidden)] pub(crate) use #macro_construct_inner; };
         }
 
         let internal_full_wildcard = format_ident!("{INTERNAL_FULL_WILDCARD}");
@@ -555,7 +518,7 @@ impl SigmaEnum {
         let variant_names: Vec<_> = variants.iter().map(|var| var.name.clone()).collect();
 
         let into_trait = self.into_trait_name();
-        let into_trait_sealed_mod = self.internal_name("into_trait_sealed_mod");
+        let into_trait_sealed_mod = self.internal_name("into_trait_sealed_mod", "");
         let into_method = self.into_method_name();
         let try_from_method = self.try_from_method_name();
         let try_from_owned_method = self.try_from_owned_method_name();
@@ -775,7 +738,15 @@ impl ToTokens for SigmaEnum {
             }
         });
 
-        self.to_tokens_macros(tokens);
+        match visibility {
+            Visibility::Public(_) => {
+                self.to_tokens_macros(tokens, true, "");
+                self.to_tokens_macros(tokens, false, "_crate");
+            }
+            _ => {
+                self.to_tokens_macros(tokens, false, "");
+            }
+        }
         self.to_tokens_traits(tokens);
     }
 }

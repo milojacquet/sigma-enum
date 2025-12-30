@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn match_ab_enum_i() {
         assert_eq!(
-            inner::ab_enum_i_match!(match inner::AbEnumI::A(A) {
+            inner::ab_enum_i_match_crate!(match inner::AbEnumI::A(A) {
                 A(_ab) => 1,
                 B(_ab) => 2,
             }),
@@ -378,7 +378,7 @@ mod tests {
         );
 
         assert_eq!(
-            inner::ab_enum_i_match!(match inner::AbEnumI::A(A) {
+            inner::ab_enum_i_match_crate!(match inner::AbEnumI::A(A) {
                 B(_ab) => 1,
                 _ab => 2,
             }),

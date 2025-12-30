@@ -211,20 +211,27 @@
 //!
 //! For public enums, you may not use the generated macros in the same crate
 //! they were defined in. This is a limitation of Rust's macro system
-//! (cf. [#52234](https://github.com/rust-lang/rust/pull/52234)).
-//! For `pub(crate)` enums, you must add the `path` attribute that contains the
-//! absolute path to the module.
+//! (cf. [issue #52234](https://github.com/rust-lang/rust/pull/52234)).
+//! For `pub(crate)` enums and other enums whose macros you intend to use in
+//! another module of the crate, you must add the `path` attribute that contains
+//! the absolute path to the module. This generates another set of macros whose
+//! names are suffixed by `_crate`
 //!
 //! ```rust
-//! mod inner {
+//! pub mod inner {
 //!     # use sigma_enum::sigma_enum;
 //!     pub struct Foo;
 //!
 //!     #[sigma_enum(path = crate::inner)]
-//!     enum FooEnum {
+//!     pub enum FooEnum {
 //!         __(Foo),
 //!     }
 //! }
+//!
+//! # fn main(){
+//! inner::foo_enum_construct_crate!(Foo(Foo));
+//! // foo_enum_construct!(Foo(Foo)); // cannot refer to this macro
+//! # }
 //! ```
 //!
 //! </div>
@@ -278,7 +285,7 @@ mod tests {
     pub struct A;
     pub struct B;
 
-    #[sigma_enum]
+    #[sigma_enum(path = crate::tests)]
     pub enum AbEnum {
         __(A),
         __(B),
@@ -350,8 +357,10 @@ mod tests {
 
     #[test]
     fn match_ab_enum() {
+        let a = ab_enum_construct_crate!(A(A));
+
         assert_eq!(
-            ab_enum_match!(match AbEnum::A(A) {
+            ab_enum_match_crate!(match a {
                 A(_ab) => 1,
                 B(_ab) => 2,
             }),
@@ -359,7 +368,7 @@ mod tests {
         );
 
         assert_eq!(
-            ab_enum_match!(match AbEnum::A(A) {
+            ab_enum_match_crate!(match a {
                 B(_ab) => 1,
                 _ab => 2,
             }),

@@ -201,19 +201,24 @@ part of the public API.
 
 For public enums, you may not use the generated macros in the same crate
 they were defined in. This is a limitation of Rust's macro system
-(cf. [#52234](https://github.com/rust-lang/rust/pull/52234)).
-For `pub(crate)` enums, you must add the `path` attribute that contains the
-absolute path to the module.
+(cf. [issue #52234](https://github.com/rust-lang/rust/pull/52234)).
+For `pub(crate)` enums and other enums whose macros you intend to use in
+another module of the crate, you must add the `path` attribute that contains
+the absolute path to the module. This generates another set of macros whose
+names are suffixed by `_crate`
 
 ```rust
-mod inner {
-    use sigma_enum::sigma_enum;
+pub mod inner {
     pub struct Foo;
 
     #[sigma_enum(path = crate::inner)]
-    enum FooEnum {
+    pub enum FooEnum {
         __(Foo),
     }
+}
+
+inner::foo_enum_construct_crate!(Foo(inner::Foo));
+// foo_enum_construct!(Foo(inner::Foo)); // cannot refer to this macro
 }
 ```
 

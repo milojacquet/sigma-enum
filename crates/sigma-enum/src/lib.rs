@@ -346,6 +346,7 @@ mod tests {
 
     // test if those in inner modules compile outside
     pub mod inner {
+        #![no_implicit_prelude]
         use crate::sigma_enum;
         use crate::tests::A;
         use crate::tests::B;

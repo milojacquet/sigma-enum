@@ -551,12 +551,12 @@ impl SigmaEnum {
             #into_method_docstring
             fn #into_method (self) -> #name;
             #try_from_method_docstring
-            fn #try_from_method (value: & #name) -> Option<&Self>;
+            fn #try_from_method (value: & #name) -> ::std::option::Option<&Self>;
             #try_from_owned_method_docstring
-            fn #try_from_owned_method (value: #name) -> Option<Self>
+            fn #try_from_owned_method (value: #name) -> ::std::option::Option<Self>
                 where Self: ::core::marker::Sized;
             #try_from_mut_method_docstring
-            fn #try_from_mut_method (value: &mut #name) -> Option<&mut Self>;
+            fn #try_from_mut_method (value: &mut #name) -> ::std::option::Option<&mut Self>;
         };
 
         tokens.append_all(quote! {
@@ -621,7 +621,7 @@ impl SigmaEnum {
                 #[automatically_derived]
                 impl<'a> ::std::convert::TryFrom<&'a #name> for &'a #variant_types {
                     type Error = #try_from_error;
-                    fn try_from(value: &'a #name) -> Result<&'a #variant_types, #try_from_error > {
+                    fn try_from(value: &'a #name) -> ::std::result::Result<&'a #variant_types, #try_from_error > {
                        < #variant_types as #into_trait >:: #try_from_method (value).ok_or( #try_from_error )
                     }
                 }
@@ -631,7 +631,7 @@ impl SigmaEnum {
                         where Self: ::core::marker::Sized
                 {
                     type Error = #try_from_error;
-                    fn try_from(value: #name) -> Result<#variant_types, #try_from_error > {
+                    fn try_from(value: #name) -> ::std::result::Result<#variant_types, #try_from_error > {
                        < #variant_types as #into_trait >:: #try_from_owned_method (value).ok_or( #try_from_error )
                     }
                 }
@@ -639,17 +639,17 @@ impl SigmaEnum {
 
             impl #name {
                 #extract_method_docstring
-                #visibility fn #extract_method <T: #into_trait >(&self) -> Option<&T> {
+                #visibility fn #extract_method <T: #into_trait >(&self) -> ::std::option::Option<&T> {
                     T:: #try_from_method (self)
                 }
 
                 #extract_owned_method_docstring
-                #visibility fn #extract_owned_method <T: #into_trait >(self) -> Option<T> {
+                #visibility fn #extract_owned_method <T: #into_trait >(self) -> ::std::option::Option<T> {
                     T:: #try_from_owned_method (self)
                 }
 
                 #extract_mut_method_docstring
-                #visibility fn #extract_mut_method <T: #into_trait >(&mut self) -> Option<&mut T> {
+                #visibility fn #extract_mut_method <T: #into_trait >(&mut self) -> ::std::option::Option<&mut T> {
                     T:: #try_from_mut_method (self)
                 }
             }

@@ -737,7 +737,7 @@ impl ToTokens for SigmaEnum {
             )
         {
             tokens.append_all(
-                quote! { compile_error!("public or restricted enum without path attribute"); },
+                quote! { ::std::compile_error!("public or restricted enum without path attribute"); },
             );
             return;
         }

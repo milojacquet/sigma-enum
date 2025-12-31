@@ -2,6 +2,7 @@
 
 #### Bugfixes
 
+* Public and restricted enums without `path` is now an error.
 * Fix paths in generated macros.
 * Documentation in `try_from_error` now works.
 

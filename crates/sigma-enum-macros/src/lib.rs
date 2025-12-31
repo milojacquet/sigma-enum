@@ -730,6 +730,18 @@ impl ToTokens for SigmaEnum {
             attr,
         } = &self;
 
+        if attr.path.is_none()
+            && matches!(
+                visibility,
+                Visibility::Public(_) | Visibility::Restricted(_)
+            )
+        {
+            tokens.append_all(
+                quote! { compile_error!("public or restricted enum without path attribute"); },
+            );
+            return;
+        }
+
         let variant_types: Vec<_> = variants
             .iter()
             .map(|var| var.ty.to_tokens_aliased(&attr.alias))

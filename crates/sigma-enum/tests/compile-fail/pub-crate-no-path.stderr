@@ -1,0 +1,7 @@
+error: public or restricted enum without path attribute
+ --> tests/compile-fail/pub-crate-no-path.rs:5:1
+  |
+5 | #[sigma_enum]
+  | ^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `sigma_enum` (in Nightly builds, run with -Z macro-backtrace for more info)

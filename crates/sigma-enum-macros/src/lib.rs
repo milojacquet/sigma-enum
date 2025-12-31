@@ -142,13 +142,14 @@ impl SigmaEnum {
             attr,
         } = &self;
 
-        let path = if export {
+        let item_path = match &attr.path {
+            Some(path) => quote! { $ #path :: },
+            None => quote! {},
+        };
+        let macro_path = if export {
             quote! { $crate :: }
         } else {
-            match &attr.path {
-                Some(path) => quote! { $ #path :: },
-                None => quote! {},
-            }
+            item_path.clone()
         };
 
         let variants_btree: BTreeMap<_, _> = variants
@@ -329,7 +330,7 @@ impl SigmaEnum {
             #[allow(unused_macros)]
             macro_rules! #macro_match {
                 ( match $( $rest:tt )* ) => {
-                    #path #macro_match_body ! { (), ( $($rest)* ) }
+                    #macro_path #macro_match_body ! { (), ( $($rest)* ) }
                 };
             }
             #macro_match_pub_use
@@ -342,10 +343,10 @@ impl SigmaEnum {
                 ( $what:tt, ({
                     $( $rest:tt )*
                 }) ) => {
-                    #path #macro_match_process_body !( $what, ( $($rest)* ), () )
+                    #macro_path #macro_match_process_body !( $what, ( $($rest)* ), () )
                 };
                 ( ( $( $what:tt )* ), ( $next:tt $( $rest:tt )* ) ) => {
-                    #path #macro_match_body ! { ( $($what)* $next ), ( $($rest)* ) }
+                    #macro_path #macro_match_body ! { ( $($what)* $next ), ( $($rest)* ) }
                 };
             }
             #macro_match_body_pub_use
@@ -361,12 +362,12 @@ impl SigmaEnum {
 
                         #[allow(unreachable_patterns)]
                         match what {
-                            $( #path #macro_match_pattern !($ty) => (), )*
+                            $( #macro_path #macro_match_pattern !($ty) => (), )*
                         }
 
                         #[allow(unused_labels)]
                         'ma: {
-                            $( #path #macro_match_variant !{$ty; what; 'ma; $binding => $body} )*
+                            $( #macro_path #macro_match_variant !{$ty; what; 'ma; $binding => $body} )*
                             ::std::unreachable!();
                         }
                     }
@@ -376,35 +377,35 @@ impl SigmaEnum {
                     ( $binding:ident => { $( $body:tt )* } $(,)? $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => { $( $body )* } ) ) )
+                    #macro_path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => { $( $body )* } ) ) )
                 };
                 (
                     $what:tt,
                     ( $binding:ident => $body:expr, $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => { $body } ) ) )
+                    #macro_path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( (#internal_full_wildcard) ; $binding => { $body } ) ) )
                 };
                 (
                     $what:tt,
                     ( $tyn:ident ( $binding:pat ) => { $( $body:tt )* } $(,)? $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn); $binding => { $($body)* } ) ) )
+                    #macro_path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn); $binding => { $($body)* } ) ) )
                 };
                 (
                     $what:tt,
                     ( $tyn:ident ( $binding:pat ) => $body:expr, $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn); $binding => { $body } ) ) )
+                    #macro_path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn); $binding => { $body } ) ) )
                 };
                 (
                     $what:tt,
                     ( $tyn:ident ::< $( $rest:tt )* ),
                     ( $( $matched:tt )* )
                 ) => {
-                    #path #macro_process_type !( (@match, $what, $tyn, ($( $matched )*)), ($( $rest )*), (<), (<) )
+                    #macro_path #macro_process_type !( (@match, $what, $tyn, ($( $matched )*)), ($( $rest )*), (<), (<) )
                 };
             }
             #macro_match_process_body_pub_use
@@ -415,10 +416,10 @@ impl SigmaEnum {
             #[doc(hidden)]
             macro_rules! #macro_process_type {
                 ( $bundle:tt, ($(,)? > $($rest:tt)*), ( $($params:tt)* ), (< $($counter:tt)*) ) => {
-                    #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* >), ($($counter)*) )
+                    #macro_path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* >), ($($counter)*) )
                 };
                 ( $bundle:tt, ($(,)? >> $($rest:tt)*), ( $($params:tt)* ), (< < $($counter:tt)*) ) => {
-                    #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* > >), ($($counter)*) )
+                    #macro_path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* > >), ($($counter)*) )
                 };
                 ( $bundle:tt, ($(,)? > $($rest:tt)*), ( $($params:tt)* ), () ) => {
                     ::std::compile_error!("imbalanced")
@@ -427,25 +428,25 @@ impl SigmaEnum {
                     ::std::compile_error!("imbalanced")
                 };
                 ( $bundle:tt, (< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* <), (< $($counter)*) )
+                    #macro_path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* <), (< $($counter)*) )
                 };
                 ( $bundle:tt, (<< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* < <), (< < $($counter)*) )
+                    #macro_path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* < <), (< < $($counter)*) )
                 };
                 ( (@match, $what:tt, $tyn:ident, ( $($matched:tt)* )), (( $binding:pat ) => { $( $body:tt )* } $(,)? $($rest:tt)*), ( $($params:tt)* ), () ) => {
-                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $($body)* } ) ) )
+                    #macro_path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $($body)* } ) ) )
                 };
                 ( (@match, $what:tt, $tyn:ident, ( $($matched:tt)* )), (( $binding:pat ) => $body:expr, $($rest:tt)*), ( $($params:tt)* ), () ) => {
-                    #path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $body } ) ) )
+                    #macro_path #macro_match_process_body !( $what, ( $($rest)* ), ( $($matched)* ( ($tyn :: $($params)+); $binding => { $body } ) ) )
                 };
                 ( (@construct, $tyn:ident), (( $expr:expr )), ( $($params:tt)+ ), () ) => {
-                    #path #macro_construct_inner !( ($tyn :: $($params)+); ( $expr ) )
+                    #macro_path #macro_construct_inner !( ($tyn :: $($params)+); ( $expr ) )
                 };
                 ( $bundle:tt, (( $($any:tt)* ) $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
                     ::std::compile_error!("imbalanced or something")
                 };
                 ( $bundle:tt, ($thing:tt $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    #path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* $thing), ( $($counter)*) )
+                    #macro_path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* $thing), ( $($counter)*) )
                 };
             }
             #macro_process_type_pub_use
@@ -456,7 +457,7 @@ impl SigmaEnum {
             #[doc(hidden)]
             macro_rules! #macro_match_variant {
                 #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
-                    #( if let #path #name :: #pat_variant_names ($binding) = $what {
+                    #( if let #item_path #name :: #pat_variant_names ($binding) = $what {
                         #const_let_statements
                         break $ma($body);
                     } )*
@@ -471,7 +472,7 @@ impl SigmaEnum {
             macro_rules! #macro_match_pattern {
                 ( ( #internal_full_wildcard ) ) => { _ };
                 #( ( ( #pat_vars_names #(::< #( #pat_vars_params ),* >)* ) ) => {
-                    #( #path #name :: #pat_variant_names (_) )|*
+                    #( #item_path #name :: #pat_variant_names (_) )|*
                 }; )*
             }
             #macro_match_pattern_pub_use
@@ -483,10 +484,10 @@ impl SigmaEnum {
             #macro_construct_docstring
             macro_rules! #macro_construct {
                 ( $tyn:ident ::< $($tt:tt)* ) => {
-                    #path #macro_process_type !( (@construct, $tyn), ($($tt)*), (<), (<) )
+                    #macro_path #macro_process_type !( (@construct, $tyn), ($($tt)*), (<), (<) )
                 };
                 ( $tyn:ident ( $body:expr ) ) => {
-                    #path #macro_construct_inner !( ($tyn); ($body) )
+                    #macro_path #macro_construct_inner !( ($tyn); ($body) )
                 };
             }
             #macro_construct_pub_use
@@ -500,7 +501,7 @@ impl SigmaEnum {
                     'ma: {
                         #( if true #(&& #pat_vars_params_eqs)* {
                             #const_let_statements
-                            break 'ma ::std::option::Option::Some(#path #name :: #pat_variant_names($body));
+                            break 'ma ::std::option::Option::Some(#item_path #name :: #pat_variant_names($body));
                         } )*
                         ::std::option::Option::None
                     }

@@ -2,6 +2,7 @@
 
 #### Bugfixes
 
+* Fix paths in generated macros.
 * Documentation in `try_from_error` now works.
 
 ### v0.1.1 - 2025-12-30

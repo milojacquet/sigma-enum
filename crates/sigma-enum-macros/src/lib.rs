@@ -655,6 +655,7 @@ impl SigmaEnum {
         });
 
         tokens.append_all(quote! {
+            #try_from_error_docstring
             pub struct #try_from_error;
 
             #[automatically_derived]
@@ -712,7 +713,6 @@ impl SigmaEnum {
                 }
             }
 
-           #try_from_error_docstring
             #[automatically_derived]
             impl ::std::error::Error for #try_from_error {}
         });

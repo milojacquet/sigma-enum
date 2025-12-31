@@ -1,6 +1,6 @@
 [package]
 name = "sigma-enum"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 license = "MIT/Apache-2.0"
 authors = ["Milo Jacquet"]
@@ -11,7 +11,7 @@ categories = ["data-structures", "rust-patterns"]
 keywords = ["derive", "dependent-types"]
 
 [dependencies]
-sigma-enum-macros = { version = "0.1.0", path = "../sigma-enum-macros" }
+sigma-enum-macros = { version = "0.1.2", path = "../sigma-enum-macros" }
 
 [dev-dependencies]
 trybuild = "1.0"

@@ -1,3 +1,9 @@
+### v0.1.2 - 2025-12-31
+
+#### Bugfixes
+
+* Documentation in `try_from_error` now works.
+
 ### v0.1.1 - 2025-12-30
 
 #### Bugfixes

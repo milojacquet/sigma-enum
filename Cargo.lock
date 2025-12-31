@@ -133,7 +133,7 @@ dependencies = [
 
 [[package]]
 name = "sigma-enum"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "sigma-enum-macros",
  "trybuild",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "sigma-enum-macros"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "heck",
  "proc-macro2",

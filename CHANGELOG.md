@@ -3,6 +3,7 @@
 #### Features
 
 * `no_std` support.
+* Docstring templates on expanded variants.
 
 #### Bugfixes
 

@@ -109,6 +109,24 @@
 //! }
 //! ```
 //!
+//! ### Docstrings for variants
+//!
+//! Docstrings can be provided as standard doc comments below the `sigma_enum`
+//! variant attribute. For a variant with the `expand` attribute, a docstring
+//! template with the same syntax as the renaming template can be provided with
+//! the `docs` attribute.
+//!
+//! ```rust
+//! # use sigma_enum::sigma_enum;
+//! struct Array<T, const N: usize>([T; N]);
+//!
+//! #[sigma_enum(generic(Array<_, ::std::primitive::usize>))]
+//! enum BytesEnum {
+//!     #[sigma_enum(expand(N = 0..3), docs = "{N} bytes.")]
+//!     __(Array<u8, N>),
+//! }
+//! ```
+//!
 //! ### Renaming types
 //!
 //! The only types allowed in variant specifications are those written as
@@ -328,7 +346,7 @@ mod tests {
         #[sigma_enum(expand(N = 0..=3))]
         __(Nu<Mu<N>>),
         NuMu5(Nu<Mu<5>>),
-        #[sigma_enum(expand(N = [7..9, 11]), rename = "NuMu{N}_Big")]
+        #[sigma_enum(expand(N = [7..9, 11]), rename = "NuMu{N}_Big", docs = "Nu Mu {N}. Big.")]
         __(Nu<Mu<N>>),
     }
 

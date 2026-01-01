@@ -35,6 +35,7 @@ struct Variant {
     ty: NiceType<Infallible>,
     name: Ident,
     attrs: Vec<Attribute>,
+    docs: proc_macro2::TokenStream,
 }
 
 #[derive(Clone)]
@@ -748,11 +749,13 @@ impl ToTokens for SigmaEnum {
             .collect();
         let variant_names: Vec<_> = variants.iter().map(|var| var.name.clone()).collect();
         let variant_attrs: Vec<_> = variants.iter().map(|var| var.attrs.clone()).collect();
+        let variant_docs: Vec<_> = variants.iter().map(|var| var.docs.clone()).collect();
 
         tokens.append_all(quote! {
             #(#subattrs)*
             #visibility enum #name {
                 #(
+                    #variant_docs
                     #(#variant_attrs)*
                     #variant_names(#variant_types),
                 )*
@@ -772,6 +775,23 @@ impl ToTokens for SigmaEnum {
     }
 }
 
+fn substitute_template(
+    template: &str,
+    assignments: &[(Ident, NiceTypeLit)],
+) -> syn::Result<String> {
+    let mut name = template.to_string();
+    for (var, val) in assignments {
+        name = name.replace(&format!("{{{}}}", var), &val.variant_name_string());
+    }
+    if name.contains('{') {
+        return Err(syn::Error::new(
+            template.span(),
+            "invalid metavariable in rename template",
+        ));
+    }
+    Ok(name)
+}
+
 impl Parse for SigmaEnum {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let subattrs = Attribute::parse_outer(input)?;
@@ -786,6 +806,7 @@ impl Parse for SigmaEnum {
         while !content.is_empty() {
             let mut expand = BTreeMap::new();
             let mut rename = None;
+            let mut docs = None;
             if let Ok(attributes) = content.call(Attribute::parse_outer) {
                 for attr in &attributes {
                     if attr.path().is_ident("sigma_enum") {
@@ -822,6 +843,23 @@ impl Parse for SigmaEnum {
                                         return Err(syn::Error::new(
                                             meta.input.span(),
                                             "invalid renaming template",
+                                        ));
+                                    }
+                                }
+                                "docs" => {
+                                    if docs.is_some() {
+                                        return Err(syn::Error::new(
+                                            meta.path.span(),
+                                            "duplicate docs attribute",
+                                        ));
+                                    }
+                                    let _: Token![=] = meta.input.parse()?;
+                                    if let Ok(template) = meta.input.parse::<LitStr>() {
+                                        docs = Some(template.value());
+                                    } else {
+                                        return Err(syn::Error::new(
+                                            meta.input.span(),
+                                            "invalid docstring template",
                                         ));
                                     }
                                 }
@@ -899,23 +937,19 @@ impl Parse for SigmaEnum {
                 }
                 let name = match &rename {
                     Some(template) => {
-                        let mut name = template.clone();
-                        for (var, val) in assignments {
-                            name =
-                                name.replace(&format!("{{{}}}", var), &val.variant_name_string());
-                        }
-                        if name.contains('{') {
-                            return Err(syn::Error::new(
-                                template.span(),
-                                "invalid metavariable in rename template",
-                            ));
-                        }
-                        format_ident!("{}", name)
+                        format_ident!("{}", substitute_template(&template, &assignments)?)
                     }
                     None => match &enum_var_name {
                         Some(enum_var_name) => enum_var_name.clone(),
                         None => var_type.variant_name(),
                     },
+                };
+                let docs = match &docs {
+                    Some(template) => {
+                        let docstring = substitute_template(&template, &assignments)?;
+                        quote! {#[doc = #docstring]}
+                    }
+                    None => quote! {},
                 };
                 if !variant_tys.insert(var_type.clone()) {
                     return Err(syn::Error::new(var_type.span(), "duplicate variant types"));
@@ -923,6 +957,7 @@ impl Parse for SigmaEnum {
                 variants.push(Variant {
                     ty: var_type,
                     name,
+                    docs,
                     attrs: attrs.clone(),
                 });
             }

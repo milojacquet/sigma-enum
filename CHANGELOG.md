@@ -1,5 +1,9 @@
 ### v0.1.2 - 2025-12-31
 
+#### Features
+
+* `no_std` support.
+
 #### Bugfixes
 
 * Public and restricted enums without `path` is now an error.

@@ -213,20 +213,14 @@ impl SigmaEnum {
             macro_match_variant_export = quote! {};
             macro_match_pattern_export = quote! {};
             macro_construct_inner_export = quote! {};
-            macro_match_pub_use = quote! { #macro_match_docstring pub(crate) use #macro_match; };
-            macro_construct_pub_use =
-                quote! { #macro_construct_docstring pub(crate) use #macro_construct; };
-            macro_match_body_pub_use = quote! { #[doc(hidden)] pub(crate) use #macro_match_body; };
-            macro_match_process_body_pub_use =
-                quote! { #[doc(hidden)] pub(crate) use #macro_match_process_body; };
-            macro_process_type_pub_use =
-                quote! { #[doc(hidden)] pub(crate) use #macro_process_type; };
-            macro_match_variant_pub_use =
-                quote! { #[doc(hidden)] pub(crate) use #macro_match_variant; };
-            macro_match_pattern_pub_use =
-                quote! { #[doc(hidden)] pub(crate) use #macro_match_pattern; };
-            macro_construct_inner_pub_use =
-                quote! { #[doc(hidden)] pub(crate) use #macro_construct_inner; };
+            macro_match_pub_use = quote! { #[allow(nonstandard_style)] #[allow(unused_imports)] #macro_match_docstring pub(crate) use #macro_match; };
+            macro_construct_pub_use = quote! { #[allow(nonstandard_style)] #[allow(unused_imports)] #macro_construct_docstring pub(crate) use #macro_construct; };
+            macro_match_body_pub_use = quote! { #[allow(nonstandard_style)] #[allow(unused_imports)] #[doc(hidden)] pub(crate) use #macro_match_body; };
+            macro_match_process_body_pub_use = quote! { #[allow(nonstandard_style)] #[allow(unused_imports)] #[doc(hidden)] pub(crate) use #macro_match_process_body; };
+            macro_process_type_pub_use = quote! { #[allow(nonstandard_style)] #[allow(unused_imports)] #[doc(hidden)] pub(crate) use #macro_process_type; };
+            macro_match_variant_pub_use = quote! { #[allow(nonstandard_style)] #[allow(unused_imports)] #[doc(hidden)] pub(crate) use #macro_match_variant; };
+            macro_match_pattern_pub_use = quote! { #[allow(nonstandard_style)] #[allow(unused_imports)] #[doc(hidden)] pub(crate) use #macro_match_pattern; };
+            macro_construct_inner_pub_use = quote! { #[allow(nonstandard_style)] #[allow(unused_imports)] #[doc(hidden)] pub(crate) use #macro_construct_inner; };
         }
 
         let internal_full_wildcard = format_ident!("{INTERNAL_FULL_WILDCARD}");
@@ -339,6 +333,7 @@ impl SigmaEnum {
         tokens.append_all(quote! {
             #macro_match_body_export
             #[doc(hidden)]
+            #[allow(nonstandard_style)]
             macro_rules! #macro_match_body {
                 ( $what:tt, ({
                     $( $rest:tt )*
@@ -355,6 +350,7 @@ impl SigmaEnum {
         tokens.append_all(quote! {
             #macro_match_process_body_export
             #[doc(hidden)]
+            #[allow(nonstandard_style)]
             macro_rules! #macro_match_process_body {
                 ( $what:tt, (), ( $( ( $ty:tt; $binding:pat => $body:expr ) )* ) ) => {
                     {
@@ -368,7 +364,7 @@ impl SigmaEnum {
                         #[allow(unused_labels)]
                         'ma: {
                             $( #macro_path #macro_match_variant !{$ty; what; 'ma; $binding => $body} )*
-                            ::std::unreachable!();
+                            ::core::unreachable!();
                         }
                     }
                 };
@@ -414,6 +410,7 @@ impl SigmaEnum {
         tokens.append_all(quote! {
             #macro_process_type_export
             #[doc(hidden)]
+            #[allow(nonstandard_style)]
             macro_rules! #macro_process_type {
                 ( $bundle:tt, ($(,)? > $($rest:tt)*), ( $($params:tt)* ), (< $($counter:tt)*) ) => {
                     #macro_path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* >), ($($counter)*) )
@@ -422,10 +419,10 @@ impl SigmaEnum {
                     #macro_path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* > >), ($($counter)*) )
                 };
                 ( $bundle:tt, ($(,)? > $($rest:tt)*), ( $($params:tt)* ), () ) => {
-                    ::std::compile_error!("imbalanced")
+                    ::core::compile_error!("imbalanced")
                 };
                 ( $bundle:tt, ($(,)? >> $($rest:tt)*), ( $($params:tt)* ), () ) => {
-                    ::std::compile_error!("imbalanced")
+                    ::core::compile_error!("imbalanced")
                 };
                 ( $bundle:tt, (< $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
                     #macro_path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* <), (< $($counter)*) )
@@ -443,7 +440,7 @@ impl SigmaEnum {
                     #macro_path #macro_construct_inner !( ($tyn :: $($params)+); ( $expr ) )
                 };
                 ( $bundle:tt, (( $($any:tt)* ) $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
-                    ::std::compile_error!("imbalanced or something")
+                    ::core::compile_error!("imbalanced or something")
                 };
                 ( $bundle:tt, ($thing:tt $($rest:tt)*), ( $($params:tt)* ), ( $($counter:tt)* ) ) => {
                     #macro_path #macro_process_type ! ( $bundle, ($($rest)*), ($($params)* $thing), ( $($counter)*) )
@@ -455,6 +452,7 @@ impl SigmaEnum {
         tokens.append_all(quote! {
             #macro_match_variant_export
             #[doc(hidden)]
+            #[allow(nonstandard_style)]
             macro_rules! #macro_match_variant {
                 #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $what:ident; $ma:lifetime; $binding:pat => $body:expr ) => {
                     #( if let #item_path #name :: #pat_variant_names ($binding) = $what {
@@ -469,6 +467,7 @@ impl SigmaEnum {
         tokens.append_all(quote! {
             #macro_match_pattern_export
             #[doc(hidden)]
+            #[allow(nonstandard_style)]
             macro_rules! #macro_match_pattern {
                 ( ( #internal_full_wildcard ) ) => { _ };
                 #( ( ( #pat_vars_names #(::< #( #pat_vars_params ),* >)* ) ) => {
@@ -481,7 +480,6 @@ impl SigmaEnum {
         tokens.append_all(quote! {
             #macro_construct_export
             #[allow(unused_macros)]
-            #macro_construct_docstring
             macro_rules! #macro_construct {
                 ( $tyn:ident ::< $($tt:tt)* ) => {
                     #macro_path #macro_process_type !( (@construct, $tyn), ($($tt)*), (<), (<) )
@@ -496,14 +494,15 @@ impl SigmaEnum {
         tokens.append_all(quote! {
             #macro_construct_inner_export
             #[doc(hidden)]
+            #[allow(nonstandard_style)]
             macro_rules! #macro_construct_inner {
                 #( ( (#pat_vars_names #(::< #( #pat_vars_params ),* >)* ); $body:expr ) => {
                     'ma: {
                         #( if true #(&& #pat_vars_params_eqs)* {
                             #const_let_statements
-                            break 'ma ::std::option::Option::Some(#item_path #name :: #pat_variant_names($body));
+                            break 'ma ::core::option::Option::Some(#item_path #name :: #pat_variant_names($body));
                         } )*
-                        ::std::option::Option::None
+                        ::core::option::Option::None
                     }
                 }; )*
             }
@@ -551,12 +550,12 @@ impl SigmaEnum {
             #into_method_docstring
             fn #into_method (self) -> #name;
             #try_from_method_docstring
-            fn #try_from_method (value: & #name) -> ::std::option::Option<&Self>;
+            fn #try_from_method (value: & #name) -> ::core::option::Option<&Self>;
             #try_from_owned_method_docstring
-            fn #try_from_owned_method (value: #name) -> ::std::option::Option<Self>
+            fn #try_from_owned_method (value: #name) -> ::core::option::Option<Self>
                 where Self: ::core::marker::Sized;
             #try_from_mut_method_docstring
-            fn #try_from_mut_method (value: &mut #name) -> ::std::option::Option<&mut Self>;
+            fn #try_from_mut_method (value: &mut #name) -> ::core::option::Option<&mut Self>;
         };
 
         tokens.append_all(quote! {
@@ -565,6 +564,7 @@ impl SigmaEnum {
                 #methods
             }
 
+            #[allow(nonstandard_style)]
             mod #into_trait_sealed_mod {
                 pub trait Sealed {}
             }
@@ -584,54 +584,54 @@ impl SigmaEnum {
                         #name :: #variant_names (self)
                     }
 
-                    fn #try_from_method <'a>(value: &'a #name) -> ::std::option::Option<&'a Self> {
+                    fn #try_from_method <'a>(value: &'a #name) -> ::core::option::Option<&'a Self> {
                         if let #name :: #variant_names (out) = value {
-                            ::std::option::Option::Some(out)
+                            ::core::option::Option::Some(out)
                         } else {
-                            ::std::option::Option::None
+                            ::core::option::Option::None
                         }
                     }
 
-                    fn #try_from_owned_method (value: #name) -> ::std::option::Option<Self>
+                    fn #try_from_owned_method (value: #name) -> ::core::option::Option<Self>
                         where Self: ::core::marker::Sized
                     {
                         if let #name :: #variant_names (out) = value {
-                            ::std::option::Option::Some(out)
+                            ::core::option::Option::Some(out)
                         } else {
-                            ::std::option::Option::None
+                            ::core::option::Option::None
                         }
                     }
 
-                    fn #try_from_mut_method <'a>(value: &'a mut #name) -> ::std::option::Option<&'a mut Self> {
+                    fn #try_from_mut_method <'a>(value: &'a mut #name) -> ::core::option::Option<&'a mut Self> {
                         if let #name :: #variant_names (out) = value {
-                            ::std::option::Option::Some(out)
+                            ::core::option::Option::Some(out)
                         } else {
-                            ::std::option::Option::None
+                            ::core::option::Option::None
                         }
                     }
                 }
 
                 #[automatically_derived]
-                impl ::std::convert::From<#variant_types> for #name {
+                impl ::core::convert::From<#variant_types> for #name {
                     fn from(value: #variant_types) -> Self {
                         #into_trait :: #into_method (value)
                     }
                 }
 
                 #[automatically_derived]
-                impl<'a> ::std::convert::TryFrom<&'a #name> for &'a #variant_types {
+                impl<'a> ::core::convert::TryFrom<&'a #name> for &'a #variant_types {
                     type Error = #try_from_error;
-                    fn try_from(value: &'a #name) -> ::std::result::Result<&'a #variant_types, #try_from_error > {
+                    fn try_from(value: &'a #name) -> ::core::result::Result<&'a #variant_types, #try_from_error > {
                        < #variant_types as #into_trait >:: #try_from_method (value).ok_or( #try_from_error )
                     }
                 }
 
                 #[automatically_derived]
-                impl ::std::convert::TryFrom<#name> for #variant_types
+                impl ::core::convert::TryFrom<#name> for #variant_types
                         where Self: ::core::marker::Sized
                 {
                     type Error = #try_from_error;
-                    fn try_from(value: #name) -> ::std::result::Result<#variant_types, #try_from_error > {
+                    fn try_from(value: #name) -> ::core::result::Result<#variant_types, #try_from_error > {
                        < #variant_types as #into_trait >:: #try_from_owned_method (value).ok_or( #try_from_error )
                     }
                 }
@@ -639,17 +639,17 @@ impl SigmaEnum {
 
             impl #name {
                 #extract_method_docstring
-                #visibility fn #extract_method <T: #into_trait >(&self) -> ::std::option::Option<&T> {
+                #visibility fn #extract_method <T: #into_trait >(&self) -> ::core::option::Option<&T> {
                     T:: #try_from_method (self)
                 }
 
                 #extract_owned_method_docstring
-                #visibility fn #extract_owned_method <T: #into_trait >(self) -> ::std::option::Option<T> {
+                #visibility fn #extract_owned_method <T: #into_trait >(self) -> ::core::option::Option<T> {
                     T:: #try_from_owned_method (self)
                 }
 
                 #extract_mut_method_docstring
-                #visibility fn #extract_mut_method <T: #into_trait >(&mut self) -> ::std::option::Option<&mut T> {
+                #visibility fn #extract_mut_method <T: #into_trait >(&mut self) -> ::core::option::Option<&mut T> {
                     T:: #try_from_mut_method (self)
                 }
             }
@@ -663,7 +663,7 @@ impl SigmaEnum {
             impl ::core::fmt::Debug for #try_from_error {
                 #[inline]
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                    ::core::fmt::Formatter::write_str(f, ::std::stringify!(#try_from_error))
+                    ::core::fmt::Formatter::write_str(f, ::core::stringify!(#try_from_error))
                 }
             }
             #[automatically_derived]
@@ -705,17 +705,17 @@ impl SigmaEnum {
             }
 
             #[automatically_derived]
-            impl ::std::fmt::Display for #try_from_error {
-                fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+            impl ::core::fmt::Display for #try_from_error {
+                fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                     f.write_str("attempted to extract value from a ")?;
-                    f.write_str(::std::stringify!( #name ))?;
+                    f.write_str(::core::stringify!( #name ))?;
                     f.write_str(" holding a different type")?;
-                    ::std::fmt::Result::Ok(())
+                    ::core::fmt::Result::Ok(())
                 }
             }
 
             #[automatically_derived]
-            impl ::std::error::Error for #try_from_error {}
+            impl ::core::error::Error for #try_from_error {}
         });
     }
 }
@@ -737,7 +737,7 @@ impl ToTokens for SigmaEnum {
             )
         {
             tokens.append_all(
-                quote! { ::std::compile_error!("public or restricted enum without path attribute"); },
+                quote! { ::core::compile_error!("public or restricted enum without path attribute"); },
             );
             return;
         }
